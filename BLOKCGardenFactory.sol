@@ -6,9 +6,9 @@ contract GardenContractFactory {
     mapping(address => bool) public authorizedDeployers;
     mapping(address => mapping(string => address)) public userDeployedContracts;
 
-    constructor(address _owner) {
-        owner = _owner;
-        authorizedDeployers[_owner] = true;
+    constructor() {
+        owner = msg.sender;
+        authorizedDeployers[msg.sender] = true;
     }
 
     modifier onlyOwner() {
