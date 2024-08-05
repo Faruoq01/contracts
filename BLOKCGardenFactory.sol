@@ -21,7 +21,7 @@ contract GardenContractFactory {
         _;
     }
 
-    event ContractDeployed(address indexed deployer, address indexed contractAddress, string name);
+    event ContractDeployed(address indexed deployer, address indexed contractAddress, string id);
     event DeployerAuthorized(address indexed deployer);
     event DeployerRevoked(address indexed deployer);
 
@@ -35,12 +35,12 @@ contract GardenContractFactory {
         emit DeployerRevoked(deployer);
     }
 
-    function deployContract(bytes memory bytecode, string memory name) external onlyAuthorized returns (address) {
+    function deployContract(bytes memory bytecode, string memory id) external onlyAuthorized returns (address) {
         // Generate the salt from the deployer address and name
-        bytes32 salt = getSalt(msg.sender, name);
+        bytes32 salt = getSalt(msg.sender, id);
 
         // Calculate the address of the contract to be deployed
-        address computedAddress = getAddress(msg.sender, bytecode, name);
+        address computedAddress = getAddress(msg.sender, bytecode, id);
 
         // Check if the contract already exists at the computed address
         require(!isContract(computedAddress), "Contract already deployed");
@@ -54,20 +54,20 @@ contract GardenContractFactory {
             }
         }
 
-        userDeployedContracts[msg.sender][name] = deployedAddress;
-        emit ContractDeployed(msg.sender, deployedAddress, name);
+        userDeployedContracts[msg.sender][id] = deployedAddress;
+        emit ContractDeployed(msg.sender, deployedAddress, id);
         return deployedAddress;
     }
 
-    function getAddress(address deployer, bytes memory bytecode, string memory name) public view returns (address) {
-        bytes32 salt = getSalt(deployer, name);
+    function getAddress(address deployer, bytes memory bytecode, string memory id) public view returns (address) {
+        bytes32 salt = getSalt(deployer, id);
         bytes32 bytecodeHash = keccak256(bytecode);
         bytes32 hash = keccak256(abi.encodePacked(bytes1(0xff), address(this), salt, bytecodeHash));
         return address(uint160(uint(hash)));
     }
 
-    function getSalt(address deployer, string memory name) public pure returns (bytes32) {
-        return keccak256(abi.encodePacked(deployer, name));
+    function getSalt(address deployer, string memory id) public pure returns (bytes32) {
+        return keccak256(abi.encodePacked(deployer, id));
     }
 
     function isContract(address addr) internal view returns (bool) {
@@ -78,7 +78,7 @@ contract GardenContractFactory {
         return size > 0;
     }
 
-    function getDeployedContract(address deployer, string memory name) external view returns (address) {
-        return userDeployedContracts[deployer][name];
+    function getDeployedContract(address deployer, string memory id) external view returns (address) {
+        return userDeployedContracts[deployer][id];
     }
 }
