@@ -22,6 +22,7 @@ contract UpgradeableProxy {
     address[] private admins;
     mapping(address => bool) private isAdmin;
     mapping(address => bool) private upgradeVotes;
+    address private proposedImplementation;
     uint256 private voteCount;
 
     constructor(address[] memory _admins, address _implementation) {
@@ -82,12 +83,22 @@ contract UpgradeableProxy {
 
     function proposeUpgrade(address _implementation) external onlyAdmin {
         require(_implementation != address(0), "Invalid implementation address");
+        proposedImplementation = _implementation;
+        _resetVotes();
+    }
+
+    function voteForUpgrade() external onlyAdmin {
+        require(proposedImplementation != address(0), "No proposed implementation");
+        require(!upgradeVotes[msg.sender], "Already voted");
         upgradeVotes[msg.sender] = true;
         voteCount++;
-        if (voteCount == admins.length) {
-            _setImplementation(_implementation);
-            _resetVotes();
-        }
+    }
+
+    function upgradeTo() external onlyAdmin {
+        require(voteCount == admins.length, "Not all admins have voted");
+        _setImplementation(proposedImplementation);
+        proposedImplementation = address(0);
+        _resetVotes();
     }
 
     function _resetVotes() private {
