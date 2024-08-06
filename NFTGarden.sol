@@ -5,6 +5,25 @@ interface IERC165 {
     function supportsInterface(bytes4 interfaceID) external view returns (bool);
 }
 
+interface IERC20 {
+    function totalSupply() external view returns (uint256);
+    function balanceOf(address account) external view returns (uint256);
+    function transfer(address recipient, uint256 amount) external returns (bool);
+    function allowance(
+        address owner,
+        address spender
+    ) external view returns (uint256);
+    function approve(address spender, uint256 amount) external returns (bool);
+    function transferFrom(
+        address sender,
+        address recipient,
+        uint256 amount
+    ) external returns (bool);
+
+    event Transfer(address indexed from, address indexed to, uint256 amount);
+    event Approval(address indexed owner, address indexed spender, uint256 amount);
+}
+
 interface IERC721 is IERC165 {
     function balanceOf(address owner) external view returns (uint256 balance);
     function ownerOf(uint256 tokenId) external view returns (address owner);
@@ -37,12 +56,13 @@ interface IERC721Receiver {
 contract TokenBoundAccount is IERC721 {
     // Set the owner of this TBA account
     address public accountOwner;
+    event TokenReceived(address indexed token, address indexed from, uint256 amount);
     
     event Transfer(
-        address indexed src, address indexed dst, uint256 indexed id
+        address indexed src, address indexed dst, uint256 indexed tokenId
     );
     event Approval(
-        address indexed owner, address indexed spender, uint256 indexed id
+        address indexed owner, address indexed spender, uint256 indexed tokenId
     );
     event ApprovalForAll(
         address indexed owner, address indexed operator, bool approved
@@ -59,134 +79,137 @@ contract TokenBoundAccount is IERC721 {
     // Mapping from token ID to approved address
     mapping(uint256 => address) internal _approvals;
     // Mapping from owner to operator approvals
-    mapping(address => mapping(address => bool)) public isApprovedForAll;
+    mapping(address => mapping(address => bool)) public override isApprovedForAll;
 
     constructor() {
         accountOwner = msg.sender;
     }
 
-    function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
+    modifier onlyOwner() {
+        require(msg.sender == accountOwner, "Caller is not the owner");
+        _;
+    }
+
+    function supportsInterface(bytes4 interfaceId) external pure override returns (bool) {
         return interfaceId == type(IERC721).interfaceId
             || interfaceId == type(IERC165).interfaceId;
     }
 
-    function ownerOf(uint256 id) external view returns (address owner) {
-        owner = _ownerOf[id];
-        require(owner != address(0), "token doesn't exist");
+    function ownerOf(uint256 tokenId) external view override returns (address owner) {
+        owner = _ownerOf[tokenId];
+        require(owner != address(0), "Token doesn't exist");
     }
 
-    function balanceOf(address owner) external view returns (uint256) {
-        require(owner != address(0), "owner = zero address");
+    function balanceOf(address owner) external view override returns (uint256) {
+        require(owner != address(0), "Owner = zero address");
         return _balanceOf[owner];
     }
 
-    function setApprovalForAll(address operator, bool approved) external {
+    function setApprovalForAll(address operator, bool approved) external override {
         isApprovedForAll[msg.sender][operator] = approved;
         emit ApprovalForAll(msg.sender, operator, approved);
     }
 
-    function getApproved(uint256 id) external view returns (address) {
-        require(_ownerOf[id] != address(0), "token doesn't exist");
-        return _approvals[id];
+    function getApproved(uint256 tokenId) external view override returns (address) {
+        require(_ownerOf[tokenId] != address(0), "Token doesn't exist");
+        return _approvals[tokenId];
     }
 
-    function approve(address spender, uint256 id) external {
-        address owner = _ownerOf[id];
+    function approve(address spender, uint256 tokenId) external override {
+        address owner = _ownerOf[tokenId];
         require(
             msg.sender == owner || isApprovedForAll[owner][msg.sender],
-            "not authorized"
+            "Not authorized"
         );
-        _approvals[id] = spender;
-        emit Approval(owner, spender, id);
+        _approvals[tokenId] = spender;
+        emit Approval(owner, spender, tokenId);
     }
 
-    function _isApprovedOrOwner(address owner, address spender, uint256 id)
+    function _isApprovedOrOwner(address owner, address spender, uint256 tokenId)
         internal
         view
         returns (bool)
     {
         return (
             spender == owner || isApprovedForAll[owner][spender]
-                || spender == _approvals[id]
+                || spender == _approvals[tokenId]
         );
     }
 
-    function transferFrom(address src, address dst, uint256 id) public {
-        require(src == _ownerOf[id], "src != owner");
-        require(dst != address(0), "transfer dst zero address");
+    function transferFrom(address src, address dst, uint256 tokenId) public override {
+        require(src == _ownerOf[tokenId], "Src != owner");
+        require(dst != address(0), "Transfer to zero address");
 
-        require(_isApprovedOrOwner(src, msg.sender, id), "not authorized");
+        require(_isApprovedOrOwner(src, msg.sender, tokenId), "Not authorized");
 
         _balanceOf[src]--;
         _balanceOf[dst]++;
-        _ownerOf[id] = dst;
+        _ownerOf[tokenId] = dst;
 
-        delete _approvals[id];
+        delete _approvals[tokenId];
 
-        emit Transfer(src, dst, id);
+        emit Transfer(src, dst, tokenId);
     }
 
-    function safeTransferFrom(address src, address dst, uint256 id) external {
-        transferFrom(src, dst, id);
+    function safeTransferFrom(address src, address dst, uint256 tokenId) external override {
+        transferFrom(src, dst, tokenId);
 
         require(
             dst.code.length == 0
-                || IERC721Receiver(dst).onERC721Received(msg.sender, src, id, "")
+                || IERC721Receiver(dst).onERC721Received(msg.sender, src, tokenId, "")
                     == IERC721Receiver.onERC721Received.selector,
-            "unsafe recipient"
+            "Unsafe recipient"
         );
     }
 
     function safeTransferFrom(
         address src,
         address dst,
-        uint256 id,
+        uint256 tokenId,
         bytes calldata data
-    ) external {
-        transferFrom(src, dst, id);
+    ) external override {
+        transferFrom(src, dst, tokenId);
 
         require(
             dst.code.length == 0
-                || IERC721Receiver(dst).onERC721Received(msg.sender, src, id, data)
+                || IERC721Receiver(dst).onERC721Received(msg.sender, src, tokenId, data)
                     == IERC721Receiver.onERC721Received.selector,
-            "unsafe recipient"
+            "Unsafe recipient"
         );
     }
 
-    function mint(address dst, uint256 id) external {
-        require(dst != address(0), "mint dst zero address");
-        require(_ownerOf[id] == address(0), "already minted");
+    function mint(address dst, uint256 tokenId) external onlyOwner {
+        require(dst != address(0), "Mint to zero address");
+        require(_ownerOf[tokenId] == address(0), "Already minted");
 
         _balanceOf[dst]++;
-        _ownerOf[id] = dst;
+        _ownerOf[tokenId] = dst;
 
-        emit Transfer(address(0), dst, id);
+        emit Transfer(address(0), dst, tokenId);
     }
 
-    function burn(uint256 id) external {
-        require(msg.sender == _ownerOf[id], "not owner");
+    function burn(uint256 tokenId) external onlyOwner {
+        require(msg.sender == _ownerOf[tokenId], "Not owner");
 
         _balanceOf[msg.sender] -= 1;
 
-        delete _ownerOf[id];
-        delete _approvals[id];
+        delete _ownerOf[tokenId];
+        delete _approvals[tokenId];
 
-        emit Transfer(msg.sender, address(0), id);
+        emit Transfer(msg.sender, address(0), tokenId);
     }
 
-    fallback() external payable {
-        if (msg.value > 0) {
-            // Handle received Ether
-        }
-        if (msg.data.length > 4) {
-            bytes4 selector = bytes4(msg.data[:4]);
-            if (selector == 0xa9059cbb) {
-                address token = address(bytes20(msg.data[4:24]));
-                uint256 amount = abi.decode(msg.data[24:32], (uint256));
-                // Handle received token (securely)
-            }
-        }
+    function getTokenBalance(address tokenAddress) external view returns (uint256) {
+        IERC20 token = IERC20(tokenAddress);
+        return token.balanceOf(address(this));
     }
 
+    function transferERC20(address tokenAddress, address recipient, uint256 amount) external onlyOwner {
+        IERC20 token = IERC20(tokenAddress);
+        require(token.transfer(recipient, amount), "Transfer failed");
+        emit TokenReceived(tokenAddress, recipient, amount);
+    }
+
+    fallback() external payable {}
     receive() external payable {}
 }
