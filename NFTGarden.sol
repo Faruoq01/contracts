@@ -5,15 +5,9 @@ interface IERC165 {
     function supportsInterface(bytes4 interfaceID) external view returns (bool);
 }
 
-interface IERC20 is IERC165 {
-    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
-    function transfer(address recipient, uint256 amount) external returns (bool);
-    function balanceOf(address account) external view returns (uint256);
-}
-
 interface IERC721 is IERC165 {
     function balanceOf(address owner) external view returns (uint256 balance);
-    function ownerOf(uint256 tokenId) external view returns (address owner)
+    function ownerOf(uint256 tokenId) external view returns (address owner);
     function safeTransferFrom(address from, address to, uint256 tokenId) external;
     function safeTransferFrom(
         address from,
@@ -40,7 +34,7 @@ interface IERC721Receiver {
     ) external returns (bytes4);
 }
 
-contract TokenBoundAccount is IERC721 is IERC20 {
+contract TokenBoundAccount is IERC721 {
     // Set the owner of this TBA account
     address public accountOwner;
     
@@ -67,22 +61,12 @@ contract TokenBoundAccount is IERC721 is IERC20 {
     // Mapping from owner to operator approvals
     mapping(address => mapping(address => bool)) public isApprovedForAll;
 
-    /*####################################################
-        ERC20 token multi-token support Storage mappings
-    #####################################################*/
-
-    // Mapping from token address to ERC20 interface
-    mapping(address => IERC20) private tokenInterfaces;
-    // List of supported tokens
-    address[] public supportedTokens;
-
-    constructor(uint256 tokenId) {
+    constructor() {
         accountOwner = msg.sender;
     }
 
     function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
-        return interfaceId == type(IERC20).interfaceId
-            || interfaceId == type(IERC721).interfaceId
+        return interfaceId == type(IERC721).interfaceId
             || interfaceId == type(IERC165).interfaceId;
     }
 
@@ -190,33 +174,19 @@ contract TokenBoundAccount is IERC721 is IERC20 {
         emit Transfer(msg.sender, address(0), id);
     }
 
-    // Add a token to the list of supported tokens
-    function addSupportedToken(address token) external onlyOwner {
-        require(tokenInterfaces[token] == IERC20(address(0)), "Token already supported");
-        supportedTokens.push(token);
-        tokenInterfaces[token] = IERC20(token);
-    }
-    
-    function deposit(address token, uint256 amount) external onlyOwner{
-        require(isSupportedToken(token), "Token not supported");
-        IERC20(token).transferFrom(msg.sender, address(this), amount);
+    fallback() external payable {
+        if (msg.value > 0) {
+            // Handle received Ether
+        }
+        if (msg.data.length > 4) {
+            bytes4 selector = bytes4(msg.data[:4]);
+            if (selector == 0xa9059cbb) {
+                address token = address(bytes20(msg.data[4:24]));
+                uint256 amount = abi.decode(msg.data[24:32], (uint256));
+                // Handle received token (securely)
+            }
+        }
     }
 
-    function withdraw(address token, uint256 amount) external onlyOwner {
-        require(isSupportedToken(token), "Token not supported");
-        uint256 contractBalance = IERC20(token).balanceOf(address(this));
-        require(amount <= contractBalance, "Insufficient balance in contract");
-        IERC20(token).transfer(msg.sender, amount);
-    }
-    
-    // Get the balance of contract token
-    function balanceOf(address token) external view returns (uint256) onlyOwner {
-        require(isSupportedToken(token), "Token not supported");
-        return IERC20(token).balanceOf(address(this));
-    }
-    
-    // Check if a token is supported
-    function isSupportedToken(address token) public view returns (bool) onlyOwner {
-        return tokenInterfaces[token] != IERC20(address(0));
-    }
+    receive() external payable {}
 }
