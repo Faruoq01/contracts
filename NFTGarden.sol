@@ -8,7 +8,26 @@ interface IERC165 {
 interface IERC20 {
     function balanceOf(address account) external view returns (uint256);
     function transfer(address recipient, uint256 amount) external returns (bool);
+    function transferFrom(address from, address to, uint256 amount) external returns (bool);
+    function approve(address spender, uint256 amount) external returns (bool);
     event Transfer(address indexed from, address indexed to, uint256 amount);
+}
+
+interface ISwapRouter02 {
+    struct ExactInputSingleParams {
+        address tokenIn;
+        address tokenOut;
+        uint24 fee;
+        address recipient;
+        uint256 amountIn;
+        uint256 amountOutMinimum;
+        uint160 sqrtPriceLimitX96;
+    }
+
+    function exactInputSingle(ExactInputSingleParams calldata params)
+        external
+        payable
+        returns (uint256 amountOut);
 }
 
 interface IERC721 is IERC165 {
@@ -43,6 +62,9 @@ interface IERC721Receiver {
 contract TokenBoundAccount is IERC721 {
     // Set the owner of this TBA account
     address public accountOwner;
+    address constant SWAP_ROUTER_02 = 0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45;
+    ISwapRouter02 private constant router = ISwapRouter02(SWAP_ROUTER_02);
+
     event TokenReceived(address indexed token, address indexed from, uint256 amount);
     
     event Transfer(
@@ -195,6 +217,47 @@ contract TokenBoundAccount is IERC721 {
         IERC20 token = IERC20(tokenAddress);
         require(token.transfer(recipient, amount), "Transfer failed");
         emit TokenReceived(tokenAddress, recipient, amount);
+    }
+
+    function swapExactInputSingleHop(
+        address tokenIn,
+        address tokenOut,
+        uint256 amountIn,
+        uint256 amountOutMin,
+        uint256 feePercentage,
+        address sender,
+        address recipient
+    ) external onlyOwner {
+        uint24 feeTier = convertFeePercentageToTier(feePercentage);
+
+        uint256 feeAmount = calculateFee(amountIn, feeTier);
+        require(amountIn > feeAmount, "Insufficient amount to cover fee");
+        uint256 amountAfterFee = amountIn - feeAmount;
+
+        IERC20(tokenIn).transferFrom(sender, address(this), amountIn);
+        IERC20(tokenIn).approve(address(router), amountAfterFee);
+
+        // Set up parameters for the swap
+        ISwapRouter02.ExactInputSingleParams memory params = ISwapRouter02.ExactInputSingleParams({
+            tokenIn: tokenIn,
+            tokenOut: tokenOut,
+            fee: feeTier,
+            recipient: recipient,
+            amountIn: amountAfterFee,
+            amountOutMinimum: amountOutMin,
+            sqrtPriceLimitX96: 0
+        });
+
+        // Execute the swap
+        router.exactInputSingle(params);
+    }
+
+    function convertFeePercentageToTier(uint256 feePercentage) public pure returns (uint24) {
+        return uint24(feePercentage * 10000);
+    }
+
+    function calculateFee(uint256 amountIn, uint24 fee) public pure returns (uint256) {
+        return amountIn * fee / 1000000; 
     }
 
     fallback() external payable {}
