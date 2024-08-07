@@ -62,7 +62,7 @@ interface IERC721Receiver {
 contract TokenBoundAccount is IERC721 {
     // Set the owner of this TBA account
     address public accountOwner;
-    address constant SWAP_ROUTER_02 = 0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45;
+    address constant SWAP_ROUTER_02 = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
     ISwapRouter02 private constant router = ISwapRouter02(SWAP_ROUTER_02);
 
     event TokenReceived(address indexed token, address indexed from, uint256 amount);
@@ -90,8 +90,8 @@ contract TokenBoundAccount is IERC721 {
     // Mapping from owner to operator approvals
     mapping(address => mapping(address => bool)) public override isApprovedForAll;
 
-    constructor() {
-        accountOwner = msg.sender;
+    constructor(address _owner) {
+        accountOwner = _owner;
     }
 
     modifier onlyOwner() {
@@ -227,7 +227,7 @@ contract TokenBoundAccount is IERC721 {
         uint256 feePercentage,
         address sender,
         address recipient
-    ) external onlyOwner {
+    ) external onlyOwner returns (ISwapRouter02.ExactInputSingleParams memory) {
         uint24 feeTier = convertFeePercentageToTier(feePercentage);
 
         uint256 feeAmount = calculateFee(amountIn, feeTier);
@@ -235,7 +235,7 @@ contract TokenBoundAccount is IERC721 {
         uint256 amountAfterFee = amountIn - feeAmount;
 
         IERC20(tokenIn).transferFrom(sender, address(this), amountIn);
-        IERC20(tokenIn).approve(address(router), amountAfterFee);
+        IERC20(tokenIn).approve(address(router), amountIn);
 
         // Set up parameters for the swap
         ISwapRouter02.ExactInputSingleParams memory params = ISwapRouter02.ExactInputSingleParams({
@@ -250,6 +250,8 @@ contract TokenBoundAccount is IERC721 {
 
         // Execute the swap
         router.exactInputSingle(params);
+
+        return params;
     }
 
     function convertFeePercentageToTier(uint256 feePercentage) public pure returns (uint24) {
@@ -257,8 +259,9 @@ contract TokenBoundAccount is IERC721 {
     }
 
     function calculateFee(uint256 amountIn, uint24 fee) public pure returns (uint256) {
-        return amountIn * fee / 1000000; 
+        return (amountIn * fee) / 10000;
     }
+
 
     fallback() external payable {}
     receive() external payable {}
