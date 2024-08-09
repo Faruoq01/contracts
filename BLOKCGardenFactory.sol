@@ -23,6 +23,7 @@ contract GardenContractFactory {
 
     event ContractDeployed(address indexed deployer, address indexed contractAddress, string id);
     event DeployerAuthorized(address indexed deployer);
+    event NewUserJoined(address indexed swaAccount);
     event DeployerRevoked(address indexed deployer);
 
     function authorizeDeployer(address deployer) external onlyOwner {
@@ -33,6 +34,11 @@ contract GardenContractFactory {
     function revokeDeployer(address deployer) external onlyOwner {
         authorizedDeployers[deployer] = false;
         emit DeployerRevoked(deployer);
+    }
+
+    function joinFactory(address swaAccount) external {
+        authorizedDeployers[swaAccount] = true;
+        emit NewUserJoined(swaAccount);
     }
 
     function deployContract(bytes memory bytecode, string memory id) external onlyAuthorized returns (address) {
