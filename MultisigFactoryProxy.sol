@@ -101,6 +101,10 @@ contract UpgradeableProxy {
         _resetVotes();
     }
 
+    function updateImplementation(address _implementation) external onlyAdmin {
+        _setImplementation(_implementation);
+    }
+
     function _resetVotes() private {
         for (uint256 i = 0; i < admins.length; i++) {
             upgradeVotes[admins[i]] = false;
