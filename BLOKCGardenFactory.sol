@@ -6,9 +6,9 @@ contract GardenContractFactory {
     mapping(address => bool) public authorizedDeployers;
     mapping(address => mapping(string => address)) public userDeployedContracts;
 
-    constructor() {
-        owner = msg.sender;
-        authorizedDeployers[msg.sender] = true;
+    constructor(address _owner) {
+        owner = _owner;
+        authorizedDeployers[_owner] = true;
     }
 
     modifier onlyOwner() {
@@ -16,14 +16,8 @@ contract GardenContractFactory {
         _;
     }
 
-    modifier onlyAuthorized() {
-        require(authorizedDeployers[msg.sender], "Not authorized");
-        _;
-    }
-
     event ContractDeployed(address indexed deployer, address indexed contractAddress, string id);
     event DeployerAuthorized(address indexed deployer);
-    event NewUserJoined(address indexed swaAccount);
     event DeployerRevoked(address indexed deployer);
 
     function authorizeDeployer(address deployer) external onlyOwner {
@@ -38,15 +32,21 @@ contract GardenContractFactory {
 
     function joinFactory(address swaAccount) external {
         authorizedDeployers[swaAccount] = true;
-        emit NewUserJoined(swaAccount);
+        emit DeployerAuthorized(swaAccount);
     }
 
-    function deployContract(bytes memory bytecode, string memory id) external onlyAuthorized returns (address) {
+    function isUserAuthorized(address swaAccount) external view returns(bool) {
+        return authorizedDeployers[swaAccount];
+    }
+
+    function deployContract(bytes memory bytecode, string memory id, address deployer) external returns (address) {
+        require(authorizedDeployers[deployer], "Not authorized");
+
         // Generate the salt from the deployer address and name
-        bytes32 salt = getSalt(msg.sender, id);
+        bytes32 salt = getSalt(deployer, id);
 
         // Calculate the address of the contract to be deployed
-        address computedAddress = getAddress(msg.sender, bytecode, id);
+        address computedAddress = getAddress(deployer, bytecode, id);
 
         // Check if the contract already exists at the computed address
         require(!isContract(computedAddress), "Contract already deployed");
@@ -60,8 +60,8 @@ contract GardenContractFactory {
             }
         }
 
-        userDeployedContracts[msg.sender][id] = deployedAddress;
-        emit ContractDeployed(msg.sender, deployedAddress, id);
+        userDeployedContracts[deployer][id] = deployedAddress;
+        emit ContractDeployed(deployer, deployedAddress, id);
         return deployedAddress;
     }
 
@@ -85,6 +85,7 @@ contract GardenContractFactory {
     }
 
     function getDeployedContract(address deployer, string memory id) external view returns (address) {
+        require(authorizedDeployers[deployer], "Not authorized");
         return userDeployedContracts[deployer][id];
     }
 }
