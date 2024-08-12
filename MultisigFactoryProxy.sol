@@ -25,16 +25,15 @@ contract UpgradeableProxy {
     address private proposedImplementation;
     uint256 private voteCount;
 
-    constructor(address[] memory _admins, address _implementation) {
+    constructor(address[] memory _admins) {
         require(_admins.length > 0, "Admins required");
         for (uint256 i = 0; i < _admins.length; i++) {
             _addAdmin(_admins[i]);
         }
-        _setImplementation(_implementation);
     }
 
-    modifier onlyAdmin() {
-        require(isAdmin[msg.sender], "Caller is not an admin");
+    modifier onlyAdmin(address _user) {
+        require(isAdmin[_user], "Caller is not an admin");
         _;
     }
 
@@ -73,28 +72,28 @@ contract UpgradeableProxy {
     }
 
     // Admin interface //
-    function addAdmin(address _admin) external onlyAdmin {
+    function addAdmin(address _admin, address _user) external onlyAdmin(_user) {
         _addAdmin(_admin);
     }
 
-    function removeAdmin(address _admin) external onlyAdmin {
+    function removeAdmin(address _admin, address _user) external onlyAdmin(_user) {
         _removeAdmin(_admin);
     }
 
-    function proposeUpgrade(address _implementation) external onlyAdmin {
+    function proposeUpgrade(address _admin, address _implementation) external onlyAdmin(_admin) {
         require(_implementation != address(0), "Invalid implementation address");
         proposedImplementation = _implementation;
         _resetVotes();
     }
 
-    function voteForUpgrade() external onlyAdmin {
+    function voteForUpgrade(address _admin) external onlyAdmin(_admin) {
         require(proposedImplementation != address(0), "No proposed implementation");
         require(!upgradeVotes[msg.sender], "Already voted");
         upgradeVotes[msg.sender] = true;
         voteCount++;
     }
 
-    function upgradeTo() external onlyAdmin {
+    function upgradeTo(address _admin) external onlyAdmin(_admin) {
         require(voteCount == admins.length, "Not all admins have voted");
         _setImplementation(proposedImplementation);
         proposedImplementation = address(0);
@@ -108,11 +107,11 @@ contract UpgradeableProxy {
         voteCount = 0;
     }
 
-    function admin() external view onlyAdmin returns (address[] memory) {
+    function admin(address _admin) external view onlyAdmin(_admin) returns (address[] memory) {
         return _getAdmin();
     }
 
-    function implementation() external view onlyAdmin returns (address) {
+    function implementation(address _admin) external view onlyAdmin(_admin) returns (address) {
         return _getImplementation();
     }
 

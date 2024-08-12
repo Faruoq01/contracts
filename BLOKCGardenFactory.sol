@@ -6,40 +6,35 @@ contract GardenContractFactory {
     mapping(address => bool) public authorizedDeployers;
     mapping(address => mapping(string => address)) public userDeployedContracts;
 
-    constructor(address _owner) {
-        owner = _owner;
-        authorizedDeployers[_owner] = true;
-    }
-
-    modifier onlyOwner() {
-        require(msg.sender == owner, "Not the owner");
-        _;
-    }
-
     event ContractDeployed(address indexed deployer, address indexed contractAddress, string id);
     event DeployerAuthorized(address indexed deployer);
     event DeployerRevoked(address indexed deployer);
 
-    function authorizeDeployer(address deployer) external onlyOwner {
+    function authorizeDeployer(address deployer, address _admin) external {
+        require(_admin == owner, "Not the owner");
         authorizedDeployers[deployer] = true;
         emit DeployerAuthorized(deployer);
     }
 
-    function revokeDeployer(address deployer) external onlyOwner {
+    function revokeDeployer(address deployer, address _admin) external {
+        require(_admin == owner, "Not the owner");
         authorizedDeployers[deployer] = false;
         emit DeployerRevoked(deployer);
     }
 
-    function joinFactory(address swaAccount) external {
+    function joinFactory(address swaAccount, address _admin) external {
+        require(_admin == owner, "Not the owner");
         authorizedDeployers[swaAccount] = true;
         emit DeployerAuthorized(swaAccount);
     }
 
-    function isUserAuthorized(address swaAccount) external view returns(bool) {
+    function isUserAuthorized(address swaAccount, address _admin) external view returns(bool) {
+        require(_admin == owner, "Not the owner");
         return authorizedDeployers[swaAccount];
     }
 
-    function deployContract(bytes memory bytecode, string memory id, address deployer) external returns (address) {
+    function deployContract(bytes memory bytecode, string memory id, address deployer, address _admin) external returns (address) {
+        require(_admin == owner, "Not the owner");
         require(authorizedDeployers[deployer], "Not authorized");
 
         // Generate the salt from the deployer address and name
@@ -84,7 +79,8 @@ contract GardenContractFactory {
         return size > 0;
     }
 
-    function getDeployedContract(address deployer, string memory id) external view returns (address) {
+    function getDeployedContract(address deployer, string memory id, address _admin) external view returns (address) {
+        require(_admin == owner, "Not the owner");
         require(authorizedDeployers[deployer], "Not authorized");
         return userDeployedContracts[deployer][id];
     }
