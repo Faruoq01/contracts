@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 contract GardenContractFactory {
-    address public owner;
+    address public impOwner;
     mapping(address => bool) public authorizedDeployers;
     mapping(address => mapping(string => address)) public userDeployedContracts;
 
@@ -11,30 +11,30 @@ contract GardenContractFactory {
     event DeployerRevoked(address indexed deployer);
 
     function authorizeDeployer(address deployer, address _admin) external {
-        require(_admin == owner, "Not the owner");
+        require(_admin == impOwner, "Not the owner");
         authorizedDeployers[deployer] = true;
         emit DeployerAuthorized(deployer);
     }
 
     function revokeDeployer(address deployer, address _admin) external {
-        require(_admin == owner, "Not the owner");
+        require(_admin == impOwner, "Not the owner");
         authorizedDeployers[deployer] = false;
         emit DeployerRevoked(deployer);
     }
 
     function joinFactory(address swaAccount, address _admin) external {
-        require(_admin == owner, "Not the owner");
+        require(_admin == impOwner, "Not the owner");
         authorizedDeployers[swaAccount] = true;
         emit DeployerAuthorized(swaAccount);
     }
 
     function isUserAuthorized(address swaAccount, address _admin) external view returns(bool) {
-        require(_admin == owner, "Not the owner");
+        require(_admin == impOwner, "Not the owner");
         return authorizedDeployers[swaAccount];
     }
 
     function deployContract(bytes memory bytecode, string memory id, address deployer, address _admin) external returns (address) {
-        require(_admin == owner, "Not the owner");
+        require(_admin == impOwner, "Not the owner");
         require(authorizedDeployers[deployer], "Not authorized");
 
         // Generate the salt from the deployer address and name
@@ -80,7 +80,7 @@ contract GardenContractFactory {
     }
 
     function getDeployedContract(address deployer, string memory id, address _admin) external view returns (address) {
-        require(_admin == owner, "Not the owner");
+        require(_admin == impOwner, "Not the owner");
         require(authorizedDeployers[deployer], "Not authorized");
         return userDeployedContracts[deployer][id];
     }
