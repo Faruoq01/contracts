@@ -60,8 +60,9 @@ interface IERC721Receiver {
 }
 
 contract TokenBoundAccount is IERC721 {
-    // Set the owner of this TBA account
     address public accountOwner;
+
+    // Set the owner of this TBA account
     address constant SWAP_ROUTER_02 = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
     ISwapRouter02 private constant router = ISwapRouter02(SWAP_ROUTER_02);
 
@@ -88,14 +89,10 @@ contract TokenBoundAccount is IERC721 {
     // Mapping from token ID to approved address
     mapping(uint256 => address) internal _approvals;
     // Mapping from owner to operator approvals
-    mapping(address => mapping(address => bool)) public override isApprovedForAll;
+    mapping(address => mapping(address => bool)) public isApprovedForAll;
 
-    constructor(address _owner) {
-        accountOwner = _owner;
-    }
-
-    modifier onlyOwner() {
-        require(msg.sender == accountOwner, "Caller is not the owner");
+    modifier onlyOwner(address _owner) {
+        require(_owner == accountOwner, "Caller is not the owner");
         _;
     }
 
@@ -187,7 +184,7 @@ contract TokenBoundAccount is IERC721 {
         );
     }
 
-    function mint(address dst, uint256 tokenId) external onlyOwner {
+    function mint(address dst, uint256 tokenId, address _owner) external onlyOwner(_owner) {
         require(dst != address(0), "Mint to zero address");
         require(_ownerOf[tokenId] == address(0), "Already minted");
 
@@ -197,7 +194,7 @@ contract TokenBoundAccount is IERC721 {
         emit Transfer(address(0), dst, tokenId);
     }
 
-    function burn(uint256 tokenId) external onlyOwner {
+    function burn(uint256 tokenId, address _owner) external onlyOwner(_owner) {
         require(msg.sender == _ownerOf[tokenId], "Not owner");
 
         _balanceOf[msg.sender] -= 1;
@@ -213,7 +210,7 @@ contract TokenBoundAccount is IERC721 {
         return token.balanceOf(address(this));
     }
 
-    function transferERC20(address tokenAddress, address recipient, uint256 amount) external onlyOwner {
+    function transferERC20(address tokenAddress, address recipient, uint256 amount, address _owner) external onlyOwner(_owner) {
         IERC20 token = IERC20(tokenAddress);
         require(token.transfer(recipient, amount), "Transfer failed");
         emit TokenReceived(tokenAddress, recipient, amount);
@@ -226,8 +223,9 @@ contract TokenBoundAccount is IERC721 {
         uint256 amountOutMin,
         uint256 feePercentage,
         address sender,
-        address recipient
-    ) external onlyOwner returns (ISwapRouter02.ExactInputSingleParams memory) {
+        address recipient,
+        address _owner
+    ) external onlyOwner(_owner) returns (ISwapRouter02.ExactInputSingleParams memory) {
         uint24 feeTier = convertFeePercentageToTier(feePercentage);
 
         uint256 feeAmount = calculateFee(amountIn, feeTier);

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 library StorageSlot {
     struct AddressSlot {
@@ -15,56 +15,48 @@ library StorageSlot {
     }
 }
 
-contract UpgradeableProxy {
-    bytes32 private constant IMPLEMENTATION_SLOT = bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1);
-    bytes32 private constant ADMIN_SLOT = bytes32(uint256(keccak256("eip1967.proxy.admin")) - 1);
+contract TransparentUpgradeableProxy {
+    address public accountOwner;
 
-    // Implementation storage
-    address public impOwner;
-    mapping(address => bool) public authorizedDeployers;
-    mapping(address => mapping(string => address)) public userDeployedContracts;
-    
-    // Proxy admins
-    address[] private admins;
-    mapping(address => bool) private isAdmin;
-    mapping(address => bool) private upgradeVotes;
-    address private proposedImplementation;
-    uint256 private voteCount;
+    /*####################################################
+        ERC721 Storage mappings
+    #####################################################*/
 
-    constructor(address[] memory _admins) {
-        require(_admins.length > 0, "Admins required");
-        for (uint256 i = 0; i < _admins.length; i++) {
-            _addAdmin(_admins[i]);
+    // Mapping from token ID to owner address
+    mapping(uint256 => address) internal _ownerOf;
+    // Mapping owner address to token count
+    mapping(address => uint256) internal _balanceOf;
+    // Mapping from token ID to approved address
+    mapping(uint256 => address) internal _approvals;
+    // Mapping from owner to operator approvals
+    mapping(address => mapping(address => bool)) public isApprovedForAll;
+
+    bytes32 private constant IMPLEMENTATION_SLOT =
+        bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1);
+        
+    bytes32 private constant ADMIN_SLOT =
+        bytes32(uint256(keccak256("eip1967.proxy.admin")) - 1);
+
+    constructor(address _admin) {
+        _setAdmin(_admin);
+        accountOwner = address(this);
+    }
+
+    modifier ifAdmin(address _admin) {
+        if (_admin == _getAdmin()) {
+            _;
+        } else {
+            _fallback();
         }
-        impOwner = address(this);
     }
 
-    modifier onlyAdmin(address _user) {
-        require(isAdmin[_user], "Caller is not an admin");
-        _;
+    function _getAdmin() private view returns (address) {
+        return StorageSlot.getAddressSlot(ADMIN_SLOT).value;
     }
 
-    function _getAdmin() private view returns (address[] memory) {
-        return admins;
-    }
-
-    function _addAdmin(address _admin) private {
+    function _setAdmin(address _admin) private {
         require(_admin != address(0), "admin = zero address");
-        require(!isAdmin[_admin], "Admin already added");
-        isAdmin[_admin] = true;
-        admins.push(_admin);
-    }
-
-    function _removeAdmin(address _admin) private {
-        require(isAdmin[_admin], "Not an admin");
-        isAdmin[_admin] = false;
-        for (uint256 i = 0; i < admins.length; i++) {
-            if (admins[i] == _admin) {
-                admins[i] = admins[admins.length - 1];
-                admins.pop();
-                break;
-            }
-        }
+        StorageSlot.getAddressSlot(ADMIN_SLOT).value = _admin;
     }
 
     function _getImplementation() private view returns (address) {
@@ -79,46 +71,19 @@ contract UpgradeableProxy {
     }
 
     // Admin interface //
-    function addAdmin(address _admin, address _user) external onlyAdmin(_user) {
-        _addAdmin(_admin);
+    function changeAdmin(address _admin, address _owner) external ifAdmin(_owner) {
+        _setAdmin(_admin);
     }
 
-    function removeAdmin(address _admin, address _user) external onlyAdmin(_user) {
-        _removeAdmin(_admin);
+    function upgradeTo(address _implementation, address _owner) external ifAdmin(_owner) {
+        _setImplementation(_implementation);
     }
 
-    function proposeUpgrade(address _admin, address _implementation) external onlyAdmin(_admin) {
-        require(_implementation != address(0), "Invalid implementation address");
-        proposedImplementation = _implementation;
-        _resetVotes();
-    }
-
-    function voteForUpgrade(address _admin) external onlyAdmin(_admin) {
-        require(proposedImplementation != address(0), "No proposed implementation");
-        require(!upgradeVotes[_admin], "Already voted");
-        upgradeVotes[_admin] = true;
-        voteCount++;
-    }
-
-    function upgradeTo(address _admin) external onlyAdmin(_admin) {
-        require(voteCount == admins.length, "Not all admins have voted");
-        _setImplementation(proposedImplementation);
-        proposedImplementation = address(0);
-        _resetVotes();
-    }
-
-    function _resetVotes() private {
-        for (uint256 i = 0; i < admins.length; i++) {
-            upgradeVotes[admins[i]] = false;
-        }
-        voteCount = 0;
-    }
-
-    function admin(address _admin) external view onlyAdmin(_admin) returns (address[] memory) {
+    function admin(address _owner) external ifAdmin(_owner) returns (address) {
         return _getAdmin();
     }
 
-    function implementation(address _admin) external view onlyAdmin(_admin) returns (address) {
+    function implementation(address _owner) external ifAdmin(_owner) returns (address) {
         return _getImplementation();
     }
 
@@ -126,7 +91,8 @@ contract UpgradeableProxy {
     function _delegate(address _implementation) internal {
         assembly {
             calldatacopy(0, 0, calldatasize())
-            let result := delegatecall(gas(), _implementation, 0, calldatasize(), 0, 0)
+            let result :=
+                delegatecall(gas(), _implementation, 0, calldatasize(), 0, 0)
             returndatacopy(0, 0, returndatasize())
 
             switch result
