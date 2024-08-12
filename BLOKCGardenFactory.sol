@@ -33,28 +33,42 @@ contract GardenContractFactory {
         return authorizedDeployers[swaAccount];
     }
 
-    function deployContract(bytes memory bytecode, string memory id, address deployer, address _admin) external returns (address) {
-        require(_admin == impOwner, "Not the owner");
+    // Function to deploy a contract
+    function deployContract(
+        bytes memory bytecode,
+        string memory id,
+        address deployer
+    ) external returns (address) {
         require(authorizedDeployers[deployer], "Not authorized");
 
-        // Generate the salt from the deployer address and name
         bytes32 salt = getSalt(deployer, id);
-
-        // Calculate the address of the contract to be deployed
         address computedAddress = getAddress(deployer, bytecode, id);
 
         // Check if the contract already exists at the computed address
         require(!isContract(computedAddress), "Contract already deployed");
 
+        // Encode the constructor arguments
+        bytes memory constructorArgs = abi.encode(deployer);
+        
+        // Concatenate bytecode and constructor arguments
+        bytes memory initCode = abi.encodePacked(bytecode, constructorArgs);
+
         // Deploy the contract using CREATE2
         address deployedAddress;
         assembly {
-            deployedAddress := create2(0, add(bytecode, 0x20), mload(bytecode), salt)
+            deployedAddress := create2(
+                0, // No value is sent with the deployment
+                add(initCode, 0x20), // Skip the length prefix
+                mload(initCode), // Length of the init code
+                salt // Salt to ensure uniqueness
+            )
+            // Check if the deployment succeeded
             if iszero(extcodesize(deployedAddress)) {
                 revert(0, 0)
             }
         }
 
+        // Store the deployed contract address
         userDeployedContracts[deployer][id] = deployedAddress;
         emit ContractDeployed(deployer, deployedAddress, id);
         return deployedAddress;
