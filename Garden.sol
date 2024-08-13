@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+/*####################################################
+    @title Garden
+    @author BLOK Capital
+#####################################################*/
+
 interface IERC165 {
     function supportsInterface(bytes4 interfaceID) external view returns (bool);
 }
@@ -61,10 +66,6 @@ interface IERC721Receiver {
 
 contract TokenBoundAccount is IERC721 {
     address public accountOwner;
-
-    /*####################################################
-        ERC721 Storage mappings
-    #####################################################*/
 
     // Mapping from token ID to owner address
     mapping(uint256 => address) internal _ownerOf;

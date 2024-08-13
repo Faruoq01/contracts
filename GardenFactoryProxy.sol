@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+/*####################################################
+    @title GardenFactoryProxy
+    @author BLOK Capital
+#####################################################*/
+
 library StorageSlot {
     struct AddressSlot {
         address value;
@@ -23,7 +28,6 @@ contract UpgradeableProxy {
     address public impOwner;
     mapping(address => bool) public authorizedDeployers;
     mapping(address => mapping(string => address)) public gardenProxyContracts;
-    mapping(string => address) public gardenImplementationContracts;
     
     // Proxy admins
     address[] private admins;
@@ -32,13 +36,18 @@ contract UpgradeableProxy {
     address private proposedImplementation;
     uint256 private voteCount;
 
-    constructor(address[] memory _admins, address _implementation) {
+    // garden implementations list
+    address[] public gardenImplementations;
+    uint256 public currentIndex;
+
+    constructor(address[] memory _admins, address _implementation, address[] memory _gardenImplementations) {
         require(_admins.length > 0, "Admins required");
         for (uint256 i = 0; i < _admins.length; i++) {
             _addAdmin(_admins[i]);
         }
         impOwner = address(this);
         _setImplementation(_implementation);
+        gardenImplementations = _gardenImplementations;
     }
 
     modifier onlyAdmin(address _user) {
@@ -139,6 +148,36 @@ contract UpgradeableProxy {
                 return(0, returndatasize())
             }
         }
+    }
+
+    function getNextGardenImplementationAddress() external returns (address) {
+        if (gardenImplementations.length == 0) {
+            revert("No addresses available");
+        }
+
+        // Retrieve the address at the current index
+        address nextAddress = gardenImplementations[currentIndex];
+
+        // Update the index to the next one in a round-robin fashion
+        currentIndex = (currentIndex + 1) % gardenImplementations.length;
+
+        return nextAddress;
+    }
+
+    function getCurrentGardenImplementationAddress() external view returns (address) {
+        if (gardenImplementations.length == 0) {
+            revert("No addresses available");
+        }
+        return gardenImplementations[currentIndex];
+    }
+
+    function getAllGardenImplementationAddresses() external view returns (address[] memory) {
+        return gardenImplementations;
+    }
+
+    function setGardenImplementationAddresses(address[] memory newAddresses, address _admin) external onlyAdmin(_admin) {
+        gardenImplementations = newAddresses;
+        currentIndex = 0;
     }
 
     function _fallback() private {

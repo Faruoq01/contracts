@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+/*####################################################
+    @title GardenProxy
+    @author BLOK Capital
+#####################################################*/
+
 library StorageSlot {
     struct AddressSlot {
         address value;
@@ -18,10 +23,6 @@ library StorageSlot {
 contract TransparentUpgradeableProxy {
     address public accountOwner;
 
-    /*####################################################
-        ERC721 Storage mappings
-    #####################################################*/
-
     // Mapping from token ID to owner address
     mapping(uint256 => address) internal _ownerOf;
     // Mapping owner address to token count
@@ -30,25 +31,18 @@ contract TransparentUpgradeableProxy {
     mapping(uint256 => address) internal _approvals;
     // Mapping from owner to operator approvals
     mapping(address => mapping(address => bool)) public isApprovedForAll;
-
-    bytes32 private constant IMPLEMENTATION_SLOT =
-        bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1);
         
     bytes32 private constant ADMIN_SLOT =
         bytes32(uint256(keccak256("eip1967.proxy.admin")) - 1);
 
-    constructor(address _admin, address _implementation) {
+    constructor(address _admin) {
         _setAdmin(_admin);
-        _setImplementation(_implementation);
         accountOwner = address(this);
     }
 
     modifier ifAdmin(address _admin) {
-        if (_admin == _getAdmin()) {
-            _;
-        } else {
-            _fallback();
-        }
+        require (_admin == _getAdmin(), "Not an admin");
+        _;
     }
 
     function _getAdmin() private view returns (address) {
@@ -60,32 +54,13 @@ contract TransparentUpgradeableProxy {
         StorageSlot.getAddressSlot(ADMIN_SLOT).value = _admin;
     }
 
-    function _getImplementation() private view returns (address) {
-        return StorageSlot.getAddressSlot(IMPLEMENTATION_SLOT).value;
-    }
-
-    function _setImplementation(address _implementation) private {
-        require(
-            _implementation.code.length > 0, "implementation is not contract"
-        );
-        StorageSlot.getAddressSlot(IMPLEMENTATION_SLOT).value = _implementation;
-    }
-
     // Admin interface //
     function changeAdmin(address _admin, address _owner) external ifAdmin(_owner) {
         _setAdmin(_admin);
     }
 
-    function upgradeTo(address _implementation, address _owner) external ifAdmin(_owner) {
-        _setImplementation(_implementation);
-    }
-
-    function admin(address _owner) external ifAdmin(_owner) returns (address) {
+    function admin(address _owner) external view ifAdmin(_owner) returns (address) {
         return _getAdmin();
-    }
-
-    function implementation(address _owner) external ifAdmin(_owner) returns (address) {
-        return _getImplementation();
     }
 
     // User interface //
@@ -106,15 +81,9 @@ contract TransparentUpgradeableProxy {
         }
     }
 
-    function _fallback() private {
-        _delegate(_getImplementation());
+    function callImplementation(address _implementation) external payable {
+        _delegate(_implementation);
     }
 
-    fallback() external payable {
-        _fallback();
-    }
-
-    receive() external payable {
-        _fallback();
-    }
+    receive() external payable {}
 }
