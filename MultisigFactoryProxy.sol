@@ -18,7 +18,14 @@ library StorageSlot {
 contract UpgradeableProxy {
     bytes32 private constant IMPLEMENTATION_SLOT = bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1);
     bytes32 private constant ADMIN_SLOT = bytes32(uint256(keccak256("eip1967.proxy.admin")) - 1);
+
+    // Implementation storage
+    address public impOwner;
+    mapping(address => bool) public authorizedDeployers;
+    mapping(address => mapping(string => address)) public gardenProxyContracts;
+    mapping(string => address) public gardenImplementationContracts;
     
+    // Proxy admins
     address[] private admins;
     mapping(address => bool) private isAdmin;
     mapping(address => bool) private upgradeVotes;
@@ -30,6 +37,7 @@ contract UpgradeableProxy {
         for (uint256 i = 0; i < _admins.length; i++) {
             _addAdmin(_admins[i]);
         }
+        impOwner = address(this);
     }
 
     modifier onlyAdmin(address _user) {
@@ -88,8 +96,8 @@ contract UpgradeableProxy {
 
     function voteForUpgrade(address _admin) external onlyAdmin(_admin) {
         require(proposedImplementation != address(0), "No proposed implementation");
-        require(!upgradeVotes[msg.sender], "Already voted");
-        upgradeVotes[msg.sender] = true;
+        require(!upgradeVotes[_admin], "Already voted");
+        upgradeVotes[_admin] = true;
         voteCount++;
     }
 

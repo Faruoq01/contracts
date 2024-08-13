@@ -4,9 +4,11 @@ pragma solidity ^0.8.24;
 contract GardenContractFactory {
     address public impOwner;
     mapping(address => bool) public authorizedDeployers;
-    mapping(address => mapping(string => address)) public userDeployedContracts;
+    mapping(address => mapping(string => address)) public gardenProxyContracts;
+    mapping(string => address) public gardenImplementationContracts;
 
-    event ContractDeployed(address indexed deployer, address indexed contractAddress, string id);
+    event GardenDeployed(address indexed deployer, address indexed contractAddress, string id);
+    event ImplementationDeployed(address indexed deployer, address indexed contractAddress);
     event DeployerAuthorized(address indexed deployer);
     event DeployerRevoked(address indexed deployer);
 
@@ -33,22 +35,60 @@ contract GardenContractFactory {
         return authorizedDeployers[swaAccount];
     }
 
-    // Function to deploy a contract
-    function deployContract(
+    // Function to deploy a garden implementation contract
+    function deployGardenImplementation(
         bytes memory bytecode,
-        string memory id,
+        string memory gardenId,
         address deployer
     ) external returns (address) {
         require(authorizedDeployers[deployer], "Not authorized");
 
-        bytes32 salt = getSalt(deployer, id);
-        address computedAddress = getAddress(deployer, bytecode, id);
+        bytes32 salt = getSalt(deployer, gardenId);
+        address computedAddress = getAddress(deployer, bytecode, gardenId);
 
         // Check if the contract already exists at the computed address
         require(!isContract(computedAddress), "Contract already deployed");
 
+        // Deploy the contract using CREATE2
+        address deployedAddress;
+        assembly {
+            deployedAddress := create2(
+                0, 
+                add(bytecode, 0x20), 
+                mload(bytecode), 
+                salt 
+            )
+            // Check if the deployment succeeded
+            if iszero(extcodesize(deployedAddress)) {
+                revert(0, 0)
+            }
+        }
+
+        // Store the deployed contract address
+        gardenImplementationContracts[gardenId] = deployedAddress;
+        emit ImplementationDeployed(deployer, deployedAddress);
+        return deployedAddress;
+    }
+
+     // Function to deploy a contract
+    function deployGardenProxy(
+        bytes memory bytecode,
+        string memory gardenId,
+        address deployer
+    ) external returns (address) {
+        require(authorizedDeployers[deployer], "Not authorized");
+
+        bytes32 salt = getSalt(deployer, gardenId);
+        address computedAddress = getAddress(deployer, bytecode, gardenId);
+
+        // Check if the contract already exists at the computed address
+        require(!isContract(computedAddress), "Contract already deployed");
+
+        // Check if the contract implementation already exist
+        require(gardenImplementationContracts[gardenId] != address(0), "Contract implementation does not exists");
+
         // Encode the constructor arguments
-        bytes memory constructorArgs = abi.encode(deployer);
+        bytes memory constructorArgs = abi.encode(deployer, gardenImplementationContracts[gardenId]);
         
         // Concatenate bytecode and constructor arguments
         bytes memory initCode = abi.encodePacked(bytecode, constructorArgs);
@@ -69,8 +109,8 @@ contract GardenContractFactory {
         }
 
         // Store the deployed contract address
-        userDeployedContracts[deployer][id] = deployedAddress;
-        emit ContractDeployed(deployer, deployedAddress, id);
+        gardenProxyContracts[deployer][gardenId] = deployedAddress;
+        emit GardenDeployed(deployer, deployedAddress, gardenId);
         return deployedAddress;
     }
 
@@ -96,6 +136,6 @@ contract GardenContractFactory {
     function getDeployedContract(address deployer, string memory id, address _admin) external view returns (address) {
         require(_admin == impOwner, "Not the owner");
         require(authorizedDeployers[deployer], "Not authorized");
-        return userDeployedContracts[deployer][id];
+        return gardenProxyContracts[deployer][id];
     }
 }
