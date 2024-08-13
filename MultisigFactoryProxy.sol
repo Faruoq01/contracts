@@ -32,12 +32,13 @@ contract UpgradeableProxy {
     address private proposedImplementation;
     uint256 private voteCount;
 
-    constructor(address[] memory _admins) {
+    constructor(address[] memory _admins, address _implementation) {
         require(_admins.length > 0, "Admins required");
         for (uint256 i = 0; i < _admins.length; i++) {
             _addAdmin(_admins[i]);
         }
         impOwner = address(this);
+        _setImplementation(_implementation);
     }
 
     modifier onlyAdmin(address _user) {
