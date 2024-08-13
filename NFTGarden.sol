@@ -62,6 +62,19 @@ interface IERC721Receiver {
 contract TokenBoundAccount is IERC721 {
     address public accountOwner;
 
+    /*####################################################
+        ERC721 Storage mappings
+    #####################################################*/
+
+    // Mapping from token ID to owner address
+    mapping(uint256 => address) internal _ownerOf;
+    // Mapping owner address to token count
+    mapping(address => uint256) internal _balanceOf;
+    // Mapping from token ID to approved address
+    mapping(uint256 => address) internal _approvals;
+    // Mapping from owner to operator approvals
+    mapping(address => mapping(address => bool)) public isApprovedForAll;
+
     // Set the owner of this TBA account
     address constant SWAP_ROUTER_02 = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
     ISwapRouter02 private constant router = ISwapRouter02(SWAP_ROUTER_02);
@@ -77,19 +90,6 @@ contract TokenBoundAccount is IERC721 {
     event ApprovalForAll(
         address indexed owner, address indexed operator, bool approved
     );
-
-    /*####################################################
-        ERC721 Storage mappings
-    #####################################################*/
-
-    // Mapping from token ID to owner address
-    mapping(uint256 => address) internal _ownerOf;
-    // Mapping owner address to token count
-    mapping(address => uint256) internal _balanceOf;
-    // Mapping from token ID to approved address
-    mapping(uint256 => address) internal _approvals;
-    // Mapping from owner to operator approvals
-    mapping(address => mapping(address => bool)) public isApprovedForAll;
 
     modifier onlyOwner(address _owner) {
         require(_owner == accountOwner, "Caller is not the owner");

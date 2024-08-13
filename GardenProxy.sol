@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.24;
+pragma solidity ^0.8.24;
 
 library StorageSlot {
     struct AddressSlot {
@@ -37,8 +37,9 @@ contract TransparentUpgradeableProxy {
     bytes32 private constant ADMIN_SLOT =
         bytes32(uint256(keccak256("eip1967.proxy.admin")) - 1);
 
-    constructor(address _admin) {
+    constructor(address _admin, address _implementation) {
         _setAdmin(_admin);
+        _setImplementation(_implementation);
         accountOwner = address(this);
     }
 
