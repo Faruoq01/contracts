@@ -150,18 +150,14 @@ contract UpgradeableProxy {
         }
     }
 
-    function getNextGardenImplementationAddress() external returns (address) {
+    function getNextGardenImplementationAddress() external returns (uint256) {
         if (gardenImplementations.length == 0) {
             revert("No addresses available");
         }
 
-        // Retrieve the address at the current index
-        address nextAddress = gardenImplementations[currentIndex];
-
         // Update the index to the next one in a round-robin fashion
         currentIndex = (currentIndex + 1) % gardenImplementations.length;
-
-        return nextAddress;
+        return currentIndex;
     }
 
     function getCurrentGardenImplementationAddress() external view returns (address) {
