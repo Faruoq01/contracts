@@ -20,8 +20,27 @@ library StorageSlot {
     }
 }
 
-contract TransparentUpgradeableProxy {
+interface IERC20 {
+    function balanceOf(address account) external view returns (uint256);
+    function transfer(address recipient, uint256 amount) external returns (bool);
+    function transferFrom(address from, address to, uint256 amount) external returns (bool);
+    function approve(address spender, uint256 amount) external returns (bool);
+    event Transfer(address indexed from, address indexed to, uint256 amount);
+}
+
+contract UpgradeableProxy {
+    event TokenReceived(address indexed token, address indexed from, uint256 amount);
+
+    bytes32 private constant IMPLEMENTATION_SLOT = bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1);
+    bytes32 private constant ADMIN_SLOT = bytes32(uint256(keccak256("eip1967.proxy.admin")) - 1);
+
+    // Implementation storage
     address public accountOwner;
+    address private admin;
+
+    /*####################################################
+        ERC721 Storage mappings
+    #####################################################*/
 
     // Mapping from token ID to owner address
     mapping(uint256 => address) internal _ownerOf;
@@ -31,44 +50,60 @@ contract TransparentUpgradeableProxy {
     mapping(uint256 => address) internal _approvals;
     // Mapping from owner to operator approvals
     mapping(address => mapping(address => bool)) public isApprovedForAll;
-        
-    bytes32 private constant ADMIN_SLOT =
-        bytes32(uint256(keccak256("eip1967.proxy.admin")) - 1);
 
     constructor(address _admin) {
         _setAdmin(_admin);
         accountOwner = address(this);
     }
 
-    modifier ifAdmin(address _admin) {
-        require (_admin == _getAdmin(), "Not an admin");
+    modifier onlyAdmin(address _user) {
+        require(admin == _user, "Caller is not an admin");
         _;
     }
 
     function _getAdmin() private view returns (address) {
-        return StorageSlot.getAddressSlot(ADMIN_SLOT).value;
+        return admin;
     }
 
     function _setAdmin(address _admin) private {
         require(_admin != address(0), "admin = zero address");
-        StorageSlot.getAddressSlot(ADMIN_SLOT).value = _admin;
+        admin = _admin;
+    }
+
+    function _getImplementation() private view returns (address) {
+        return StorageSlot.getAddressSlot(IMPLEMENTATION_SLOT).value;
+    }
+
+    function _setImplementation(address _implementation) private {
+        require(
+            _implementation.code.length > 0, "implementation is not contract"
+        );
+        StorageSlot.getAddressSlot(IMPLEMENTATION_SLOT).value = _implementation;
     }
 
     // Admin interface //
-    function changeAdmin(address _admin, address _owner) external ifAdmin(_owner) {
+    function _addAdmin(address _admin, address proxy) external onlyAdmin(proxy) {
         _setAdmin(_admin);
     }
 
-    function admin(address _owner) external view ifAdmin(_owner) returns (address) {
+    function upgradeTo(address _admin, address _implementation) external onlyAdmin(_admin) {
+        require(_admin != address(0), "Invalid address");
+        _setImplementation(_implementation);
+    }
+
+    function getAdmin(address _admin) external view onlyAdmin(_admin) returns (address) {
         return _getAdmin();
+    }
+
+    function implementation(address _admin) external view onlyAdmin(_admin) returns (address) {
+        return _getImplementation();
     }
 
     // User interface //
     function _delegate(address _implementation) internal {
         assembly {
             calldatacopy(0, 0, calldatasize())
-            let result :=
-                delegatecall(gas(), _implementation, 0, calldatasize(), 0, 0)
+            let result := delegatecall(gas(), _implementation, 0, calldatasize(), 0, 0)
             returndatacopy(0, 0, returndatasize())
 
             switch result
@@ -81,9 +116,26 @@ contract TransparentUpgradeableProxy {
         }
     }
 
-    function callImplementation(address _implementation) external payable {
-        _delegate(_implementation);
+    function getTokenBalance(address tokenAddress) external view returns (uint256) {
+        IERC20 token = IERC20(tokenAddress);
+        return token.balanceOf(accountOwner);
     }
 
-    receive() external payable {}
+    function transferERC20(address tokenAddress, address recipient, uint256 amount, address _admin) external onlyAdmin(_admin) {
+        IERC20 token = IERC20(tokenAddress);
+        require(token.transfer(recipient, amount), "Transfer failed");
+        emit TokenReceived(tokenAddress, recipient, amount);
+    }
+
+    function _fallback() private {
+        _delegate(_getImplementation());
+    }
+
+    fallback() external payable {
+        _fallback();
+    }
+
+    receive() external payable {
+        _fallback();
+    }
 }

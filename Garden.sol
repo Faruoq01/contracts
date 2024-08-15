@@ -10,31 +10,6 @@ interface IERC165 {
     function supportsInterface(bytes4 interfaceID) external view returns (bool);
 }
 
-interface IERC20 {
-    function balanceOf(address account) external view returns (uint256);
-    function transfer(address recipient, uint256 amount) external returns (bool);
-    function transferFrom(address from, address to, uint256 amount) external returns (bool);
-    function approve(address spender, uint256 amount) external returns (bool);
-    event Transfer(address indexed from, address indexed to, uint256 amount);
-}
-
-interface ISwapRouter02 {
-    struct ExactInputSingleParams {
-        address tokenIn;
-        address tokenOut;
-        uint24 fee;
-        address recipient;
-        uint256 amountIn;
-        uint256 amountOutMinimum;
-        uint160 sqrtPriceLimitX96;
-    }
-
-    function exactInputSingle(ExactInputSingleParams calldata params)
-        external
-        payable
-        returns (uint256 amountOut);
-}
-
 interface IERC721 is IERC165 {
     function balanceOf(address owner) external view returns (uint256 balance);
     function ownerOf(uint256 tokenId) external view returns (address owner);
@@ -67,6 +42,10 @@ interface IERC721Receiver {
 contract TokenBoundAccount is IERC721 {
     address public accountOwner;
 
+    /*####################################################
+        ERC721 Storage mappings
+    #####################################################*/
+
     // Mapping from token ID to owner address
     mapping(uint256 => address) internal _ownerOf;
     // Mapping owner address to token count
@@ -76,11 +55,6 @@ contract TokenBoundAccount is IERC721 {
     // Mapping from owner to operator approvals
     mapping(address => mapping(address => bool)) public isApprovedForAll;
 
-    // Set the owner of this TBA account
-    address constant SWAP_ROUTER_02 = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
-    ISwapRouter02 private constant router = ISwapRouter02(SWAP_ROUTER_02);
-
-    event TokenReceived(address indexed token, address indexed from, uint256 amount);
     
     event Transfer(
         address indexed src, address indexed dst, uint256 indexed tokenId
@@ -206,62 +180,5 @@ contract TokenBoundAccount is IERC721 {
         emit Transfer(msg.sender, address(0), tokenId);
     }
 
-    function getTokenBalance(address tokenAddress) external view returns (uint256) {
-        IERC20 token = IERC20(tokenAddress);
-        return token.balanceOf(address(this));
-    }
-
-    function transferERC20(address tokenAddress, address recipient, uint256 amount, address _owner) external onlyOwner(_owner) {
-        IERC20 token = IERC20(tokenAddress);
-        require(token.transfer(recipient, amount), "Transfer failed");
-        emit TokenReceived(tokenAddress, recipient, amount);
-    }
-
-    function swapExactInputSingleHop(
-        address tokenIn,
-        address tokenOut,
-        uint256 amountIn,
-        uint256 amountOutMin,
-        uint256 feePercentage,
-        address sender,
-        address recipient,
-        address _owner
-    ) external onlyOwner(_owner) returns (ISwapRouter02.ExactInputSingleParams memory) {
-        uint24 feeTier = convertFeePercentageToTier(feePercentage);
-
-        uint256 feeAmount = calculateFee(amountIn, feeTier);
-        require(amountIn > feeAmount, "Insufficient amount to cover fee");
-        uint256 amountAfterFee = amountIn - feeAmount;
-
-        IERC20(tokenIn).transferFrom(sender, address(this), amountIn);
-        IERC20(tokenIn).approve(address(router), amountIn);
-
-        // Set up parameters for the swap
-        ISwapRouter02.ExactInputSingleParams memory params = ISwapRouter02.ExactInputSingleParams({
-            tokenIn: tokenIn,
-            tokenOut: tokenOut,
-            fee: feeTier,
-            recipient: recipient,
-            amountIn: amountAfterFee,
-            amountOutMinimum: amountOutMin,
-            sqrtPriceLimitX96: 0
-        });
-
-        // Execute the swap
-        router.exactInputSingle(params);
-
-        return params;
-    }
-
-    function convertFeePercentageToTier(uint256 feePercentage) public pure returns (uint24) {
-        return uint24(feePercentage * 10000);
-    }
-
-    function calculateFee(uint256 amountIn, uint24 fee) public pure returns (uint256) {
-        return (amountIn * fee) / 10000;
-    }
-
-
-    fallback() external payable {}
     receive() external payable {}
 }
