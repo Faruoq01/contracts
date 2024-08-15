@@ -27,8 +27,8 @@
   <summary>Table of Contents</summary>
   <ol>
     <li>
-      <a href="#about-the-project">About The Project</a>
-      <ul>
+      <a href="#version-1.0.0">Version 1.0.0</a>
+      <!-- <ul>
         <li><a href="#built-with">Built With</a></li>
       </ul>
     </li>
@@ -44,18 +44,19 @@
     <li><a href="#contributing">Contributing</a></li>
     <li><a href="#license">License</a></li>
     <li><a href="#contact">Contact</a></li>
-    <li><a href="#acknowledgments">Acknowledgments</a></li>
+    <li><a href="#acknowledgments">Acknowledgments</a></li> -->
   </ol>
 </details>
 
 
-## Version = 1.0.0
+## Version 1.0.0
 
 Version 1.0.0 of smart contracts represents the core contracts used in BLOK Capital Protocol. BLOK Capital is the disruptive investment management protocol that uses blockchain technology and smart contracts to connect investors and wealth managers in a easier, safer, and smarter way.
 
 These contracts are standardised on ERC 4337 & ERC 6551 EVM Protocol standards enabling decentralised compatibility to scale wealth management system like BLOK Capital where features like Self Custody, Social Login, Gardens and Gardeners connectivity, Batch Transactions & Guardiens can be enabled.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
+
 
 
 
