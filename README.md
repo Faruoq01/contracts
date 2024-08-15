@@ -63,7 +63,7 @@ These contracts are standardised on ERC 4337 & ERC 6551 EVM Protocol standards e
 ## Built With
 
 *[![Solidity][Solidity.logo]][Solidity-url]
-*[![Remix-IDE][RemixIDE.logo]][RemixIDE-url]
+*[![RemixIDE][RemixIDE.logo]][RemixIDE-url]
 *[![Hardhat][Hardhat.logo]][Hardhat-url]
 *[![Foundry][Foundry.logo]][Foundry-url]
 
