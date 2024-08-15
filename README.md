@@ -28,6 +28,9 @@
   <ol>
     <li>
       <a href="#version-1.0.0">Version 1.0.0</a>
+      <ul>
+        <li><a href="#built-with">Built With</a></li>
+      </ul>
       <!-- <ul>
         <li><a href="#built-with">Built With</a></li>
       </ul>
@@ -56,6 +59,31 @@ Version 1.0.0 of smart contracts represents the core contracts used in BLOK Capi
 These contracts are standardised on ERC 4337 & ERC 6551 EVM Protocol standards enabling decentralised compatibility to scale wealth management system like BLOK Capital where features like Self Custody, Social Login, Gardens and Gardeners connectivity, Batch Transactions & Guardiens can be enabled.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+## Built With
+
+*[![Solidity][Solidity.logo]][Solidity-url]
+*[![Remix IDE][RemixIDE.logo]][RemixIDE-url]
+*[![Hardhat][Hardhat.logo]][Hardhat-url]
+*[![Foundry][Foundry.logo]][Foundry-url]
+
+
+
+<!-- MARKDOWN LINKS & IMAGES -->
+<!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
+
+[Solidity.logo]: https://img.shields.io/badge/solidity-%23000000?style=for-the-badge&logo=solidity&logoColor=white
+[Solidity-url]: https://soliditylang.org
+
+[RemixIDE.logo]: https://img.shields.io/badge/Remix-IDE-%23000000?style=for-the-badge&logo=remix&logoColor=white
+[RemixIDE-url]: https://remix.ethereum.org
+
+[Hardhat.logo]: https://img.shields.io/badge/Hardhat-%23000000?style=for-the-badge&logo=hardhat&logoColor=white
+[Hardhat-url]: https://hardhat.org
+
+[Foundry.logo]: https://img.shields.io/badge/Foundry-%23000000?style=for-the-badge&logo=foundry&logoColor=white
+[Foundry-url]: https://getfoundry.sh
+
 
 
 
