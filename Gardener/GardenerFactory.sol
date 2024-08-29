@@ -11,7 +11,7 @@ contract GardenerContractFactory {
     mapping(address => bool) public authorizedDeployers;
     mapping(address => mapping(string => address)) public gardenerProxyContracts;
 
-    event GardenDeployed(address indexed deployer, address indexed contractAddress, string id);
+    event GardenerDeployed(address indexed deployer, address indexed contractAddress, string id);
     event DeployerAuthorized(address indexed deployer);
     event DeployerRevoked(address indexed deployer);
 
@@ -75,7 +75,7 @@ contract GardenerContractFactory {
 
         // Store the deployed contract address
         gardenerProxyContracts[deployer][gardenId] = deployedAddress;
-        emit GardenDeployed(deployer, deployedAddress, gardenId);
+        emit GardenerDeployed(deployer, deployedAddress, gardenId);
         return deployedAddress;
     }
 
@@ -98,7 +98,7 @@ contract GardenerContractFactory {
         return size > 0;
     }
 
-    function getDeployedGardenProxyContract(address deployer, string memory id, address _admin) external view returns (address) {
+    function getDeployedGardenerProxyContract(address deployer, string memory id, address _admin) external view returns (address) {
         require(_admin == impOwner, "Not the owner");
         require(authorizedDeployers[deployer], "Not authorized");
         return gardenerProxyContracts[deployer][id];

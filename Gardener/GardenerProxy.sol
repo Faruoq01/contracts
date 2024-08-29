@@ -27,19 +27,12 @@ contract UpgradeableProxy {
     // Implementation storage
     address public accountOwner;
     address private admin;
+    mapping(string => address) public assignedGardens;
+    mapping(address => bool) public isGardenApproved;
 
-    /*####################################################
-        ERC721 Storage mappings
-    #####################################################*/
-
-    // Mapping from token ID to owner address
-    mapping(uint256 => address) internal _ownerOf;
-    // Mapping owner address to token count
-    mapping(address => uint256) internal _balanceOf;
-    // Mapping from token ID to approved address
-    mapping(uint256 => address) internal _approvals;
-    // Mapping from owner to operator approvals
-    mapping(address => mapping(address => bool)) public isApprovedForAll;
+    //events
+    event CancelGardenerAssinment(address garden);
+    event GardenerAssinment(address garden);
 
     constructor(address _admin) {
         _setAdmin(_admin);
@@ -49,6 +42,27 @@ contract UpgradeableProxy {
     modifier onlyAdmin(address _user) {
         require(admin == _user, "Caller is not an admin");
         _;
+    }
+
+    modifier onlyGarden(address _garden) {
+        require(isGardenApproved[_garden], "Caller is not a garden");
+        _;
+    }
+
+    function assignGardener(address _garden) public {
+        require(_garden != address(0), "Garden is not a valid address");
+        isGardenApproved[_garden] = false;
+        emit GardenerAssinment(_garden);
+    }
+
+    function cancelGardenerAssignment(address _garden) public onlyGarden(_garden) {
+        isGardenApproved[_garden] = false;
+        emit CancelGardenerAssinment(_garden);
+    }
+
+    function isActiveGardener(address _garden) public view returns(bool) {
+        require(isGardenApproved[_garden], "Caller is not a garden");
+        return isGardenApproved[_garden];
     }
 
     function _getAdmin() private view returns (address) {
@@ -104,17 +118,6 @@ contract UpgradeableProxy {
                 return(0, returndatasize())
             }
         }
-    }
-
-    function getTokenBalance(address tokenAddress) external view returns (uint256) {
-        IERC20 token = IERC20(tokenAddress);
-        return token.balanceOf(accountOwner);
-    }
-
-    function transferERC20(address tokenAddress, address recipient, uint256 amount, address _admin) external onlyAdmin(_admin) {
-        IERC20 token = IERC20(tokenAddress);
-        require(token.transfer(recipient, amount), "Transfer failed");
-        emit TokenReceived(tokenAddress, recipient, amount);
     }
 
     function _fallback() private {
