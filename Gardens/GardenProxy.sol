@@ -37,6 +37,7 @@ contract UpgradeableProxy {
     // Implementation storage
     address public accountOwner;
     address private admin;
+    address public gardener;
 
     /*####################################################
         ERC721 Storage mappings
@@ -59,6 +60,16 @@ contract UpgradeableProxy {
     modifier onlyAdmin(address _user) {
         require(admin == _user, "Caller is not an admin");
         _;
+    }
+
+    function assignGardener(address _gardener, address _proxy) public onlyAdmin(_proxy) {
+        require(_gardener != address(0), "Not a valid address");
+        gardener = _gardener;
+    }
+
+    function cancelGardener(address _gardener, address _proxy) public onlyAdmin(_proxy) {
+        require(_gardener == address(0), "Not a valid address");
+        gardener = address(0);
     }
 
     function _getAdmin() private view returns (address) {
