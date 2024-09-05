@@ -1,11 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.24;
 
-/*####################################################
-    @title GardenTokenSwaps
-    @author BLOK Capital
-#####################################################*/
-
 abstract contract IERC20 {
     event Transfer(address indexed from, address indexed to, uint256 amount);
     event Approval(address indexed owner, address indexed spender, uint256 amount);
@@ -94,77 +89,89 @@ abstract contract IERC20 {
     Single hop swap
 ########################################*/
 
-interface IUniswapV2Router {
-    function swapExactTokensForTokens(
-        uint256 amountIn,
-        uint256 amountOutMin,
-        address[] calldata path,
-        address to,
-        uint256 deadline
-    ) external returns (uint256[] memory amounts);
-
-    function swapTokensForExactTokens(
-        uint256 amountOut,
-        uint256 amountInMax,
-        address[] calldata path,
-        address to,
-        uint256 deadline
-    ) external returns (uint256[] memory amounts);
-}
-
-contract UniswapV2SingleHopSwap {
-    address private constant UNISWAP_V2_ROUTER =
-        0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
-
-
-    function swapSingleHopExactAmountIn(
-        address source,
-        uint256 amountIn, 
-        uint256 amountOutMin, 
-        address tokenIn, 
-        address tokenOut
-    ) external {
-        IUniswapV2Router router = IUniswapV2Router(UNISWAP_V2_ROUTER);
-        IERC20 initializeTokenIn = IERC20(tokenIn);
-        // IERC20 initializeTokenOut = IERC20(tokenOut);
-
-        initializeTokenIn.transferFrom(source, address(this), amountIn);
-        initializeTokenIn.approve(address(router), amountIn);
-
-        address[] memory path = new address[](2);
-        path[0] = tokenIn;
-        path[1] = tokenOut;
-
-        router.swapExactTokensForTokens(
-            amountIn, amountOutMin, path, source, block.timestamp
-        );
+interface ISwapRouter03 {
+    struct ExactInputSingleParams {
+        address tokenIn;
+        address tokenOut;
+        uint24 fee;
+        address recipient;
+        uint256 amountIn;
+        uint256 amountOutMinimum;
+        uint160 sqrtPriceLimitX96;
     }
 
-    function swapSingleHopExactAmountOut(
-        address source,
-        uint256 amountOutDesired,
-        uint256 amountInMax,
-        address tokenIn,
-        address tokenOut
-    ) external {
-        IUniswapV2Router router = IUniswapV2Router(UNISWAP_V2_ROUTER);
-        IERC20 initializeTokenIn = IERC20(tokenIn);
-        // IERC20 initializeTokenOut = IERC20(tokenOut);
+    function exactInputSingle(ExactInputSingleParams calldata params)
+        external
+        payable
+        returns (uint256 amountOut);
 
-        initializeTokenIn.transferFrom(source, address(this), amountInMax);
-        initializeTokenIn.approve(address(router), amountInMax);
+    struct ExactOutputSingleParams {
+        address tokenIn;
+        address tokenOut;
+        uint24 fee;
+        address recipient;
+        uint256 amountOut;
+        uint256 amountInMaximum;
+        uint160 sqrtPriceLimitX96;
+    }
 
-        address[] memory path = new address[](2);
-        path[0] = tokenIn;
-        path[1] = tokenOut;
+    function exactOutputSingle(ExactOutputSingleParams calldata params)
+        external
+        payable
+        returns (uint256 amountIn);
+}
 
-        uint256[] memory amounts = router.swapTokensForExactTokens(
-            amountOutDesired, amountInMax, path, source, block.timestamp
-        );
+address constant SWAP_ROUTER_03 = 0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45;
+address constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+address constant DAI = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
 
-        // Refund WETH to msg.sender
-        if (amounts[0] < amountInMax) {
-            initializeTokenIn.transfer(source, amountInMax - amounts[0]);
+contract UniswapV3SingleHopSwap {
+    ISwapRouter03 private constant router = ISwapRouter03(SWAP_ROUTER_03);
+    IERC20 private constant weth = IERC20(WETH);
+    IERC20 private constant dai = IERC20(DAI);
+
+    function swapExactInputSingleHop(uint256 amountIn, uint256 amountOutMin)
+        external
+    {
+        weth.transferFrom(msg.sender, address(this), amountIn);
+        weth.approve(address(router), amountIn);
+
+        ISwapRouter03.ExactInputSingleParams memory params = ISwapRouter03
+            .ExactInputSingleParams({
+            tokenIn: WETH,
+            tokenOut: DAI,
+            fee: 3000,
+            recipient: msg.sender,
+            amountIn: amountIn,
+            amountOutMinimum: amountOutMin,
+            sqrtPriceLimitX96: 0
+        });
+
+        router.exactInputSingle(params);
+    }
+
+    function swapExactOutputSingleHop(uint256 amountOut, uint256 amountInMax)
+        external
+    {
+        weth.transferFrom(msg.sender, address(this), amountInMax);
+        weth.approve(address(router), amountInMax);
+
+        ISwapRouter03.ExactOutputSingleParams memory params = ISwapRouter03
+            .ExactOutputSingleParams({
+            tokenIn: WETH,
+            tokenOut: DAI,
+            fee: 3000,
+            recipient: msg.sender,
+            amountOut: amountOut,
+            amountInMaximum: amountInMax,
+            sqrtPriceLimitX96: 0
+        });
+
+        uint256 amountIn = router.exactOutputSingle(params);
+
+        if (amountIn < amountInMax) {
+            weth.approve(address(router), 0);
+            weth.transfer(msg.sender, amountInMax - amountIn);
         }
     }
 }

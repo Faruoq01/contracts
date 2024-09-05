@@ -28,6 +28,38 @@ interface IERC20 {
     event Transfer(address indexed from, address indexed to, uint256 amount);
 }
 
+interface ISwapRouter03 {
+    struct ExactInputSingleParams {
+        address tokenIn;
+        address tokenOut;
+        uint24 fee;
+        address recipient;
+        uint256 amountIn;
+        uint256 amountOutMinimum;
+        uint160 sqrtPriceLimitX96;
+    }
+
+    function exactInputSingle(ExactInputSingleParams calldata params)
+    external
+    payable
+    returns (uint256 amountOut);
+
+    struct ExactOutputSingleParams {
+        address tokenIn;
+        address tokenOut;
+        uint24 fee;
+        address recipient;
+        uint256 amountOut;
+        uint256 amountInMaximum;
+        uint160 sqrtPriceLimitX96;
+    }
+
+    function exactOutputSingle(ExactOutputSingleParams calldata params)
+    external
+    payable
+    returns (uint256 amountIn);
+}
+
 contract UpgradeableProxy {
     event TokenReceived(address indexed token, address indexed from, uint256 amount);
 
@@ -132,11 +164,49 @@ contract UpgradeableProxy {
         return token.balanceOf(accountOwner);
     }
 
-    function transferERC20(address tokenAddress, address recipient, uint256 amount, address _admin) external onlyAdmin(_admin) {
+    function transferERC20(
+        address tokenAddress, address recipient, uint256 amount, address _admin
+    ) external virtual onlyAdmin(_admin) {
         IERC20 token = IERC20(tokenAddress);
         require(token.transfer(recipient, amount), "Transfer failed");
         emit TokenReceived(tokenAddress, recipient, amount);
     }
+
+    function swapExactInputSingleHop(
+        uint256 amountIn, 
+        uint256 amountOutMin, 
+        address tokenIn, 
+        address tokenOut
+    ) 
+        external 
+        virtual 
+    {
+        address SWAP_ROUTER_03 = 0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45;
+        ISwapRouter03 router = ISwapRouter03(SWAP_ROUTER_03);
+        IERC20 ItokenIn = IERC20(tokenIn);
+
+        // Ensure the contract has enough tokens to perform the swap
+        require(ItokenIn.balanceOf(address(this)) >= amountIn, "Insufficient token balance in contract");
+
+        // Approve the swap router to spend the specified amount of tokens
+        ItokenIn.approve(address(router), amountIn);
+
+        // Set up the parameters for the swap
+        ISwapRouter03.ExactInputSingleParams memory params = ISwapRouter03
+            .ExactInputSingleParams({
+            tokenIn: tokenIn,
+            tokenOut: tokenOut,
+            fee: 3000, 
+            recipient: address(this), 
+            amountIn: amountIn,
+            amountOutMinimum: amountOutMin,
+            sqrtPriceLimitX96: 0
+        });
+
+        // Perform the swap
+        router.exactInputSingle(params);
+    }
+
 
     function _fallback() private {
         _delegate(_getImplementation());
