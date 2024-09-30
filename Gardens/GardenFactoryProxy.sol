@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 /*####################################################
     @title GardenFactoryProxy
@@ -20,39 +20,58 @@ library StorageSlot {
     }
 }
 
-contract UpgradeableProxy {
-    bytes32 private constant IMPLEMENTATION_SLOT = bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1);
-    bytes32 private constant ADMIN_SLOT = bytes32(uint256(keccak256("eip1967.proxy.admin")) - 1);
+interface ERC1271 {
+    function isValidSignature(
+        bytes32 _hash,
+        bytes calldata _signature
+    ) external view returns (bytes4);
+}
 
-    // Implementation storage
-    address public impOwner;
-    mapping(address => bool) public authorizedDeployers;
-    mapping(address => mapping(string => address)) public gardenProxyContracts;
+contract GardenUpgradableProxy {
+    bytes4 public constant MAGIC_VALUE = 0x1626ba7e;
+    event AdminChanged(address previousAdmin, address newAdmin);
+    event Upgraded(address newImplementation);
+
+    bytes32 private constant IMPLEMENTATION_SLOT =
+        bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1);
+        
+    bytes32 private constant ADMIN_SLOT =
+        bytes32(uint256(keccak256("eip1967.proxy.admin")) - 1);
     
-    // Proxy admins
+    // Proxy admins and factory storage
     address[] private admins;
     mapping(address => bool) private isAdmin;
+    mapping(address => bool) public authorizedDeployers;
     mapping(address => bool) private upgradeVotes;
-    address private proposedImplementation;
+    address private proposedFactoryImplementation;
     uint256 private voteCount;
 
     // garden implementations list
-    address[] public gardenImplementations;
+    mapping(address => mapping(string => address)) public gardenProxyContracts;
+    mapping(uint256 => address) public gardenImplementationMap;
+    address[] public gardenImplementationList;
     uint256 public currentIndex;
 
-    constructor(address[] memory _admins, address _implementation, address[] memory _gardenImplementations) {
+    constructor(address[] memory _admins, address _implementation, uint256 gardenImpModule, address _gardenImplementation) {
         require(_admins.length > 0, "Admins required");
         for (uint256 i = 0; i < _admins.length; i++) {
             _addAdmin(_admins[i]);
         }
-        impOwner = address(this);
         _setImplementation(_implementation);
-        gardenImplementations = _gardenImplementations;
+        gardenImplementationList.push(_gardenImplementation);
+        gardenImplementationMap[gardenImpModule] = _gardenImplementation; 
     }
 
-    modifier onlyAdmin(address _user) {
+    modifier onlyAdmin(address _user, bytes32 hash, bytes memory _signature) {
+        require(_isValidSignature(_user, hash, _signature), "Invalid user access");
         require(isAdmin[_user], "Caller is not an admin");
         _;
+    }
+
+    function _isValidSignature(address _addr, bytes32 hash, bytes memory _signature) public view returns (bool) {
+        bytes4 result = ERC1271(_addr).isValidSignature(hash, _signature);
+        require((result == MAGIC_VALUE), "Invalid Signature");
+        return result == MAGIC_VALUE;
     }
 
     function _getAdmin() private view returns (address[] memory) {
@@ -78,7 +97,7 @@ contract UpgradeableProxy {
         }
     }
 
-    function _getImplementation() private view returns (address) {
+    function _getFactoryImplementation() private view returns (address) {
         return StorageSlot.getAddressSlot(IMPLEMENTATION_SLOT).value;
     }
 
@@ -90,31 +109,41 @@ contract UpgradeableProxy {
     }
 
     // Admin interface //
-    function addAdmin(address _admin, address _user) external onlyAdmin(_user) {
+    function addAdmin(address _admin, address _user, bytes32 hash, bytes memory _signature) 
+        external onlyAdmin(_user, hash, _signature) 
+    {
         _addAdmin(_admin);
     }
 
-    function removeAdmin(address _admin, address _user) external onlyAdmin(_user) {
+    function removeAdmin(address _admin, address _user, bytes32 hash, bytes memory _signature) 
+        external onlyAdmin(_user, hash, _signature) 
+    {
         _removeAdmin(_admin);
     }
 
-    function proposeUpgrade(address _admin, address _implementation) external onlyAdmin(_admin) {
+    function proposeUpgrade(address _admin, address _implementation, bytes32 hash, bytes memory _signature) 
+        external onlyAdmin(_admin, hash, _signature) 
+    {
         require(_implementation != address(0), "Invalid implementation address");
-        proposedImplementation = _implementation;
+        proposedFactoryImplementation = _implementation;
         _resetVotes();
     }
 
-    function voteForUpgrade(address _admin) external onlyAdmin(_admin) {
-        require(proposedImplementation != address(0), "No proposed implementation");
+    function voteForUpgrade(address _admin, bytes32 hash, bytes memory _signature) 
+        external onlyAdmin(_admin, hash, _signature) 
+    {
+        require(proposedFactoryImplementation != address(0), "No proposed implementation");
         require(!upgradeVotes[_admin], "Already voted");
         upgradeVotes[_admin] = true;
         voteCount++;
     }
 
-    function upgradeTo(address _admin) external onlyAdmin(_admin) {
+    function upgradeTo(address _admin, bytes32 hash, bytes memory _signature) 
+        external onlyAdmin(_admin, hash, _signature) 
+    {
         require(voteCount == admins.length, "Not all admins have voted");
-        _setImplementation(proposedImplementation);
-        proposedImplementation = address(0);
+        _setImplementation(proposedFactoryImplementation);
+        proposedFactoryImplementation = address(0);
         _resetVotes();
     }
 
@@ -125,21 +154,25 @@ contract UpgradeableProxy {
         voteCount = 0;
     }
 
-    function admin(address _admin) external view onlyAdmin(_admin) returns (address[] memory) {
+    function admin(address _admin, bytes32 hash, bytes memory _signature) 
+        external view onlyAdmin(_admin, hash, _signature) returns (address[] memory) 
+    {
         return _getAdmin();
     }
 
-    function implementation(address _admin) external view onlyAdmin(_admin) returns (address) {
-        return _getImplementation();
+    function implementation(address _admin, bytes32 hash, bytes memory _signature)  
+        external view onlyAdmin(_admin, hash, _signature) returns (address) 
+    {
+        return _getFactoryImplementation();
     }
 
     // User interface //
     function _delegate(address _implementation) internal {
         assembly {
             calldatacopy(0, 0, calldatasize())
-            let result := delegatecall(gas(), _implementation, 0, calldatasize(), 0, 0)
+            let result :=
+                delegatecall(gas(), _implementation, 0, calldatasize(), 0, 0)
             returndatacopy(0, 0, returndatasize())
-
             switch result
             case 0 {
                 revert(0, returndatasize())
@@ -150,34 +183,18 @@ contract UpgradeableProxy {
         }
     }
 
-    function getNextGardenImplementationAddress() external returns (uint256) {
-        if (gardenImplementations.length == 0) {
-            revert("No addresses available");
-        }
-
-        // Update the index to the next one in a round-robin fashion
-        currentIndex = (currentIndex + 1) % gardenImplementations.length;
-        return currentIndex;
-    }
-
-    function getCurrentGardenImplementationAddress() external view returns (address) {
-        if (gardenImplementations.length == 0) {
-            revert("No addresses available");
-        }
-        return gardenImplementations[currentIndex];
-    }
-
-    function getAllGardenImplementationAddresses() external view returns (address[] memory) {
-        return gardenImplementations;
-    }
-
-    function setGardenImplementationAddresses(address[] memory newAddresses, address _admin) external onlyAdmin(_admin) {
-        gardenImplementations = newAddresses;
-        currentIndex = 0;
-    }
-
     function _fallback() private {
-        _delegate(_getImplementation());
+        // uint256 key = _extractKeyFromData(msg.data);
+        _delegate(_getFactoryImplementation());
+    }
+
+    function _extractKeyFromData(bytes memory data) internal pure returns (uint256) {
+        require(data.length >= 36, "Insufficient data");
+        uint256 key;
+        assembly {
+            key := mload(add(data, 0x20)) 
+        }
+        return key;
     }
 
     fallback() external payable {

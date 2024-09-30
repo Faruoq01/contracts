@@ -2,48 +2,84 @@
 pragma solidity ^0.8.24;
 
 /*####################################################
-    @title GardenFactory
+    @title GardenFactoryImplementation
     @author BLOK Capital
 #####################################################*/
 
-contract GardenContractFactory {
-    address public impOwner;
-    mapping(address => bool) public authorizedDeployers;
-    mapping(address => mapping(string => address)) public gardenProxyContracts;
+interface ERC1271 {
+    function isValidSignature(
+        bytes32 _hash,
+        bytes calldata _signature
+    ) external view returns (bytes4);
+}
 
+contract GardenFactoryImplementationContract {
+    bytes4 public constant MAGIC_VALUE = 0x1626ba7e;
     event GardenDeployed(address indexed deployer, address indexed contractAddress, string id);
     event DeployerAuthorized(address indexed deployer);
     event DeployerRevoked(address indexed deployer);
 
-    function authorizeDeployer(address deployer, address _admin) external {
-        require(_admin == impOwner, "Not the owner");
+    // Proxy admins and factory storage
+    address[] private admins;
+    mapping(address => bool) private isAdmin;
+    mapping(address => bool) public authorizedDeployers;
+    mapping(address => bool) private upgradeVotes;
+    address private proposedFactoryImplementation;
+    uint256 private voteCount;
+
+    // garden implementations list
+    mapping(address => mapping(string => address)) public gardenProxyContracts;
+    mapping(uint256 => address) public gardenImplementationMap;
+    address[] public gardenImplementationList;
+    uint256 public currentIndex;
+
+    modifier onlyAdmin(address _user, bytes32 hash, bytes memory _signature) {
+        require(_isValidSignature(_user, hash, _signature), "Invalid user access");
+        require(isAdmin[_user], "Caller is not an admin");
+        _;
+    }
+
+    function _isValidSignature(address _addr, bytes32 hash, bytes memory _signature) public view returns (bool) {
+        bytes4 result = ERC1271(_addr).isValidSignature(hash, _signature);
+        require((result == MAGIC_VALUE), "Invalid Signature");
+        return result == MAGIC_VALUE;
+    }
+
+    function authorizeDeployer(address deployer, address _admin, bytes32 hash, bytes memory _signature) 
+        external onlyAdmin(_admin, hash, _signature) 
+    {
         authorizedDeployers[deployer] = true;
         emit DeployerAuthorized(deployer);
     }
 
-    function revokeDeployer(address deployer, address _admin) external {
-        require(_admin == impOwner, "Not the owner");
+    function revokeDeployer(address deployer, address _admin, bytes32 hash, bytes memory _signature) 
+        external onlyAdmin(_admin, hash, _signature) 
+    {
         authorizedDeployers[deployer] = false;
         emit DeployerRevoked(deployer);
     }
 
-    function joinFactory(address swaAccount, address _admin) external {
-        require(_admin == impOwner, "Not the owner");
+    function joinFactory(address swaAccount, address _admin, bytes32 hash, bytes memory _signature) 
+        external onlyAdmin(_admin, hash, _signature) 
+    {
         authorizedDeployers[swaAccount] = true;
         emit DeployerAuthorized(swaAccount);
     }
 
-    function isUserAuthorized(address swaAccount, address _admin) external view returns(bool) {
-        require(_admin == impOwner, "Not the owner");
+    function isUserAuthorized(address swaAccount, address _admin, bytes32 hash, bytes memory _signature) 
+        external view onlyAdmin(_admin, hash, _signature)  returns(bool)
+    {
         return authorizedDeployers[swaAccount];
     }
 
-    // Function to deploy a contract
     function deployGardenProxy(
         bytes memory bytecode,
         string memory gardenId,
-        address deployer
-    ) external returns (address) {
+        address deployer,
+        bytes32 hash, 
+        bytes memory _signature
+    ) external onlyAdmin(deployer, hash, _signature) returns (address) 
+    {
         require(authorizedDeployers[deployer], "Not authorized");
 
         bytes32 salt = getSalt(deployer, gardenId);
@@ -62,18 +98,16 @@ contract GardenContractFactory {
         address deployedAddress;
         assembly {
             deployedAddress := create2(
-                0, // No value is sent with the deployment
-                add(initCode, 0x20), // Skip the length prefix
-                mload(initCode), // Length of the init code
-                salt // Salt to ensure uniqueness
+                0,
+                add(initCode, 0x20), 
+                mload(initCode), 
+                salt 
             )
-            // Check if the deployment succeeded
             if iszero(extcodesize(deployedAddress)) {
                 revert(0, 0)
             }
         }
 
-        // Store the deployed contract address
         gardenProxyContracts[deployer][gardenId] = deployedAddress;
         emit GardenDeployed(deployer, deployedAddress, gardenId);
         return deployedAddress;
@@ -98,9 +132,15 @@ contract GardenContractFactory {
         return size > 0;
     }
 
-    function getDeployedGardenProxyContract(address deployer, string memory id, address _admin) external view returns (address) {
-        require(_admin == impOwner, "Not the owner");
+    function getDeployedGardenProxyContract(
+        address deployer, 
+        string memory gardenId, 
+        bytes32 hash, 
+        bytes memory _signature
+    ) 
+        external view onlyAdmin(deployer, hash, _signature) returns (address) 
+    {
         require(authorizedDeployers[deployer], "Not authorized");
-        return gardenProxyContracts[deployer][id];
+        return gardenProxyContracts[deployer][gardenId];
     }
 }
