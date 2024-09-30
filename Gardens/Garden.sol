@@ -6,179 +6,129 @@ pragma solidity ^0.8.24;
     @author BLOK Capital
 #####################################################*/
 
-interface IERC165 {
-    function supportsInterface(bytes4 interfaceID) external view returns (bool);
+interface ERC1271 {
+    function isValidSignature(
+        bytes32 _hash,
+        bytes calldata _signature
+    ) external view returns (bytes4);
 }
 
-interface IERC721 is IERC165 {
-    function balanceOf(address owner) external view returns (uint256 balance);
-    function ownerOf(uint256 tokenId) external view returns (address owner);
-    function safeTransferFrom(address from, address to, uint256 tokenId) external;
-    function safeTransferFrom(
-        address from,
-        address to,
-        uint256 tokenId,
-        bytes calldata data
-    ) external;
-    function transferFrom(address from, address to, uint256 tokenId) external;
-    function approve(address to, uint256 tokenId) external;
-    function getApproved(uint256 tokenId) external view returns (address operator);
-    function setApprovalForAll(address operator, bool _approved) external;
-    function isApprovedForAll(
-        address owner,
-        address operator
-    ) external view returns (bool);
+interface IERC20 {
+    function balanceOf(address account) external view returns (uint256);
+    function transfer(address recipient, uint256 amount) external returns (bool);
+    function transferFrom(address from, address to, uint256 amount) external returns (bool);
+    function approve(address spender, uint256 amount) external returns (bool);
+    event Transfer(address indexed from, address indexed to, uint256 amount);
 }
 
-interface IERC721Receiver {
-    function onERC721Received(
-        address operator,
-        address from,
-        uint256 tokenId,
-        bytes calldata data
-    ) external returns (bytes4);
+interface ISwapRouter03 {
+    struct ExactInputSingleParams {
+        address tokenIn;
+        address tokenOut;
+        uint24 fee;
+        address recipient;
+        uint256 amountIn;
+        uint256 amountOutMinimum;
+        uint160 sqrtPriceLimitX96;
+    }
+
+    function exactInputSingle(ExactInputSingleParams calldata params)
+    external
+    payable
+    returns (uint256 amountOut);
+
+    struct ExactOutputSingleParams {
+        address tokenIn;
+        address tokenOut;
+        uint24 fee;
+        address recipient;
+        uint256 amountOut;
+        uint256 amountInMaximum;
+        uint160 sqrtPriceLimitX96;
+    }
+
+    function exactOutputSingle(ExactOutputSingleParams calldata params)
+    external
+    payable
+    returns (uint256 amountIn);
 }
 
-contract TokenBoundAccount is IERC721 {
-    address public accountOwner;
+contract TokenBoundAccount {
+    event TokenReceived(address indexed token, address indexed from, uint256 amount);
+    bytes4 public constant MAGIC_VALUE = 0x1626ba7e;
 
-    /*####################################################
-        ERC721 Storage mappings
-    #####################################################*/
+    bytes32 private constant IMPLEMENTATION_SLOT = bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1);
+    bytes32 private constant ADMIN_SLOT = bytes32(uint256(keccak256("eip1967.proxy.admin")) - 1);
 
-    // Mapping from token ID to owner address
-    mapping(uint256 => address) internal _ownerOf;
-    // Mapping owner address to token count
-    mapping(address => uint256) internal _balanceOf;
-    // Mapping from token ID to approved address
-    mapping(uint256 => address) internal _approvals;
-    // Mapping from owner to operator approvals
-    mapping(address => mapping(address => bool)) public isApprovedForAll;
+    // garden contract storage
+    address private admin;
+    address public gardenAddress;
+    address private immutable nftOwership;
+    mapping(uint256 => address) public gardenImplementationMap;
 
-    
-    event Transfer(
-        address indexed src, address indexed dst, uint256 indexed tokenId
-    );
-    event Approval(
-        address indexed owner, address indexed spender, uint256 indexed tokenId
-    );
-    event ApprovalForAll(
-        address indexed owner, address indexed operator, bool approved
-    );
-
-    modifier onlyOwner(address _owner) {
-        require(_owner == accountOwner, "Caller is not the owner");
+    modifier onlyAdmin(address _user, bytes32 hash, bytes memory _signature) {
+        require(_isValidSignature(_user, hash, _signature), "Invalid user access");
+        require(admin == _user, "Caller is not authorized");
         _;
     }
 
-    function supportsInterface(bytes4 interfaceId) external pure override returns (bool) {
-        return interfaceId == type(IERC721).interfaceId
-            || interfaceId == type(IERC165).interfaceId;
+    function _isValidSignature(address _addr, bytes32 hash, bytes memory _signature) public view returns (bool) {
+        bytes4 result = ERC1271(_addr).isValidSignature(hash, _signature);
+        require((result == MAGIC_VALUE), "Invalid Signature");
+        return result == MAGIC_VALUE;
     }
 
-    function ownerOf(uint256 tokenId) external view override returns (address owner) {
-        owner = _ownerOf[tokenId];
-        require(owner != address(0), "Token doesn't exist");
-    }
-
-    function balanceOf(address owner) external view override returns (uint256) {
-        require(owner != address(0), "Owner = zero address");
-        return _balanceOf[owner];
-    }
-
-    function setApprovalForAll(address operator, bool approved) external override {
-        isApprovedForAll[msg.sender][operator] = approved;
-        emit ApprovalForAll(msg.sender, operator, approved);
-    }
-
-    function getApproved(uint256 tokenId) external view override returns (address) {
-        require(_ownerOf[tokenId] != address(0), "Token doesn't exist");
-        return _approvals[tokenId];
-    }
-
-    function approve(address spender, uint256 tokenId) external override {
-        address owner = _ownerOf[tokenId];
-        require(
-            msg.sender == owner || isApprovedForAll[owner][msg.sender],
-            "Not authorized"
-        );
-        _approvals[tokenId] = spender;
-        emit Approval(owner, spender, tokenId);
-    }
-
-    function _isApprovedOrOwner(address owner, address spender, uint256 tokenId)
-        internal
-        view
-        returns (bool)
+    function getTokenBalance(address tokenAddress, address _admin, bytes32 hash, bytes memory _signature) 
+        external onlyAdmin(_admin, hash, _signature) view returns (uint256) 
     {
-        return (
-            spender == owner || isApprovedForAll[owner][spender]
-                || spender == _approvals[tokenId]
-        );
+        IERC20 token = IERC20(tokenAddress);
+        return token.balanceOf(gardenAddress);
     }
 
-    function transferFrom(address src, address dst, uint256 tokenId) public override {
-        require(src == _ownerOf[tokenId], "Src != owner");
-        require(dst != address(0), "Transfer to zero address");
-
-        require(_isApprovedOrOwner(src, msg.sender, tokenId), "Not authorized");
-
-        _balanceOf[src]--;
-        _balanceOf[dst]++;
-        _ownerOf[tokenId] = dst;
-
-        delete _approvals[tokenId];
-
-        emit Transfer(src, dst, tokenId);
+    function transferERC20(
+        address tokenAddress, address recipient, uint256 amount, address _admin, bytes32 hash, bytes memory _signature
+    ) external virtual onlyAdmin(_admin, hash, _signature) {
+        IERC20 token = IERC20(tokenAddress);
+        require(token.transfer(recipient, amount), "Transfer failed");
+        emit TokenReceived(tokenAddress, recipient, amount);
     }
 
-    function safeTransferFrom(address src, address dst, uint256 tokenId) external override {
-        transferFrom(src, dst, tokenId);
+    function swapExactInputSingleHop(
+        uint256 gardenImpModule,
+        uint256 amountIn, 
+        uint256 amountOutMin, 
+        address tokenIn, 
+        address tokenOut,
+        address _admin,
+        bytes32 hash, 
+        bytes memory _signature
+    ) 
+        external onlyAdmin(_admin, hash, _signature)
+        virtual 
+    {
+        address SWAP_ROUTER_03 = 0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45;
+        ISwapRouter03 router = ISwapRouter03(SWAP_ROUTER_03);
+        IERC20 ItokenIn = IERC20(tokenIn);
 
-        require(
-            dst.code.length == 0
-                || IERC721Receiver(dst).onERC721Received(msg.sender, src, tokenId, "")
-                    == IERC721Receiver.onERC721Received.selector,
-            "Unsafe recipient"
-        );
+        // Ensure the contract has enough tokens to perform the swap
+        require(ItokenIn.balanceOf(address(this)) >= amountIn, "Insufficient token balance in contract");
+
+        // Approve the swap router to spend the specified amount of tokens
+        ItokenIn.approve(address(router), amountIn);
+
+        // Set up the parameters for the swap
+        ISwapRouter03.ExactInputSingleParams memory params = ISwapRouter03
+            .ExactInputSingleParams({
+            tokenIn: tokenIn,
+            tokenOut: tokenOut,
+            fee: 3000, 
+            recipient: address(this), 
+            amountIn: amountIn,
+            amountOutMinimum: amountOutMin,
+            sqrtPriceLimitX96: 0
+        });
+
+        // Perform the swap
+        router.exactInputSingle(params);
     }
-
-    function safeTransferFrom(
-        address src,
-        address dst,
-        uint256 tokenId,
-        bytes calldata data
-    ) external override {
-        transferFrom(src, dst, tokenId);
-
-        require(
-            dst.code.length == 0
-                || IERC721Receiver(dst).onERC721Received(msg.sender, src, tokenId, data)
-                    == IERC721Receiver.onERC721Received.selector,
-            "Unsafe recipient"
-        );
-    }
-
-    function mint(address dst, uint256 tokenId, address _owner) external onlyOwner(_owner) {
-        require(dst != address(0), "Mint to zero address");
-        require(_ownerOf[tokenId] == address(0), "Already minted");
-
-        _balanceOf[dst]++;
-        _ownerOf[tokenId] = dst;
-
-        emit Transfer(address(0), dst, tokenId);
-    }
-
-    function burn(uint256 tokenId, address _owner) external onlyOwner(_owner) {
-        require(msg.sender == _ownerOf[tokenId], "Not owner");
-
-        _balanceOf[msg.sender] -= 1;
-
-        delete _ownerOf[tokenId];
-        delete _approvals[tokenId];
-
-        emit Transfer(msg.sender, address(0), tokenId);
-    }
-
-    receive() external payable {}
 }

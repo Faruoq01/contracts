@@ -50,7 +50,6 @@ contract GardenUpgradableProxy {
     mapping(address => mapping(string => address)) public gardenProxyContracts;
     mapping(uint256 => address) public gardenImplementationMap;
     address[] public gardenImplementationList;
-    uint256 public currentIndex;
 
     constructor(address[] memory _admins, address _implementation, uint256 gardenImpModule, address _gardenImplementation) {
         require(_admins.length > 0, "Admins required");
@@ -166,6 +165,21 @@ contract GardenUpgradableProxy {
         return _getFactoryImplementation();
     }
 
+    // garden implementation interface
+    function setGardenImplementationModule(address _admin, address _implementation, uint256 gardenImpModule, bytes32 hash, bytes memory _signature) 
+        external onlyAdmin(_admin, hash, _signature) 
+    {
+        require(_admin != address(0), "Invalid address");
+        require(_implementation != address(0), "Invalid address");
+        gardenImplementationMap[gardenImpModule] = _implementation;
+    }
+
+    function getGardenImplementationModule(address _admin, uint256 gardenImpModule, bytes32 hash, bytes memory _signature) 
+        external view onlyAdmin(_admin, hash, _signature) returns (address) 
+    {
+        return gardenImplementationMap[gardenImpModule];
+    }
+
     // User interface //
     function _delegate(address _implementation) internal {
         assembly {
@@ -184,17 +198,7 @@ contract GardenUpgradableProxy {
     }
 
     function _fallback() private {
-        // uint256 key = _extractKeyFromData(msg.data);
         _delegate(_getFactoryImplementation());
-    }
-
-    function _extractKeyFromData(bytes memory data) internal pure returns (uint256) {
-        require(data.length >= 36, "Insufficient data");
-        uint256 key;
-        assembly {
-            key := mload(add(data, 0x20)) 
-        }
-        return key;
     }
 
     fallback() external payable {

@@ -31,7 +31,6 @@ contract GardenFactoryImplementationContract {
     mapping(address => mapping(string => address)) public gardenProxyContracts;
     mapping(uint256 => address) public gardenImplementationMap;
     address[] public gardenImplementationList;
-    uint256 public currentIndex;
 
     modifier onlyAdmin(address _user, bytes32 hash, bytes memory _signature) {
         require(_isValidSignature(_user, hash, _signature), "Invalid user access");
