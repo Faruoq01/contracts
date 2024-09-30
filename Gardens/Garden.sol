@@ -66,7 +66,8 @@ contract TokenBoundAccount {
     address private immutable nftOwership;
     mapping(uint256 => address) public gardenImplementationMap;
 
-    modifier onlyAdmin(address _user, bytes32 hash, bytes memory _signature) {
+    modifier onlyAdmin(address _user, uint256 gardenImpModule, bytes32 hash, bytes memory _signature) {
+        require(gardenImplementationMap[gardenImpModule] != address(0), "Garden implementation not set");
         require(_isValidSignature(_user, hash, _signature), "Invalid user access");
         require(admin == _user, "Caller is not authorized");
         _;
@@ -78,16 +79,16 @@ contract TokenBoundAccount {
         return result == MAGIC_VALUE;
     }
 
-    function getTokenBalance(address tokenAddress, address _admin, bytes32 hash, bytes memory _signature) 
-        external onlyAdmin(_admin, hash, _signature) view returns (uint256) 
+    function getTokenBalance(uint256 gardenImpModule, address tokenAddress, address _admin, bytes32 hash, bytes memory _signature) 
+        external onlyAdmin(_admin, gardenImpModule, hash, _signature) view returns (uint256) 
     {
         IERC20 token = IERC20(tokenAddress);
         return token.balanceOf(gardenAddress);
     }
 
     function transferERC20(
-        address tokenAddress, address recipient, uint256 amount, address _admin, bytes32 hash, bytes memory _signature
-    ) external virtual onlyAdmin(_admin, hash, _signature) {
+        uint256 gardenImpModule, address tokenAddress, address recipient, uint256 amount, address _admin, bytes32 hash, bytes memory _signature
+    ) external virtual onlyAdmin(_admin, gardenImpModule, hash, _signature) {
         IERC20 token = IERC20(tokenAddress);
         require(token.transfer(recipient, amount), "Transfer failed");
         emit TokenReceived(tokenAddress, recipient, amount);
@@ -103,9 +104,19 @@ contract TokenBoundAccount {
         bytes32 hash, 
         bytes memory _signature
     ) 
-        external onlyAdmin(_admin, hash, _signature)
+        external onlyAdmin(_admin, gardenImpModule, hash, _signature)
         virtual 
     {
+        // Approve tokens and perform the swap
+        _approveAndSwap(tokenIn, tokenOut, amountIn, amountOutMin);
+    }
+
+    function _approveAndSwap(
+        address tokenIn,
+        address tokenOut,
+        uint256 amountIn,
+        uint256 amountOutMin
+    ) internal {
         address SWAP_ROUTER_03 = 0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45;
         ISwapRouter03 router = ISwapRouter03(SWAP_ROUTER_03);
         IERC20 ItokenIn = IERC20(tokenIn);
