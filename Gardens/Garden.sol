@@ -67,8 +67,8 @@ contract TokenBoundAccount {
     mapping(uint256 => address) public gardenImplementationMap;
 
     modifier onlyAdmin(address _user, uint256 gardenImpModule, bytes32 hash, bytes memory _signature) {
-        require(gardenImplementationMap[gardenImpModule] != address(0), "Garden implementation not set");
         require(_isValidSignature(_user, hash, _signature), "Invalid user access");
+        require(gardenImplementationMap[gardenImpModule] != address(0), "Garden implementation not set");
         require(admin == _user, "Caller is not authorized");
         _;
     }
