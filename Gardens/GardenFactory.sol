@@ -32,9 +32,14 @@ contract GardenFactoryImplementationContract {
     mapping(uint256 => address) public gardenImplementationMap;
     address[] public gardenImplementationList;
 
-    modifier onlyAdmin(address _user, bytes32 hash, bytes memory _signature) {
-        require(_isValidSignature(_user, hash, _signature), "Invalid user access");
-        require(isAdmin[_user], "Caller is not an admin");
+    modifier onlyAdmin(address _admin, bytes32 hash, bytes memory _signature) {
+        require(_isValidSignature(_admin, hash, _signature), "Invalid user access");
+        require(isAdmin[_admin], "Caller is not an admin");
+        _;
+    }
+
+    modifier _validateSignature(address _swa, bytes32 hash, bytes memory _signature) {
+        require(_isValidSignature(_swa, hash, _signature), "Invalid user access");
         _;
     }
 
@@ -44,29 +49,29 @@ contract GardenFactoryImplementationContract {
         return result == MAGIC_VALUE;
     }
 
-    function authorizeDeployer(address deployer, address _admin, bytes32 hash, bytes memory _signature) 
+    function authorizeDeployer(address _admin, address deployer, bytes32 hash, bytes memory _signature) 
         external onlyAdmin(_admin, hash, _signature) 
     {
         authorizedDeployers[deployer] = true;
         emit DeployerAuthorized(deployer);
     }
 
-    function revokeDeployer(address deployer, address _admin, bytes32 hash, bytes memory _signature) 
+    function revokeDeployer(address _admin, address deployer, bytes32 hash, bytes memory _signature) 
         external onlyAdmin(_admin, hash, _signature) 
     {
         authorizedDeployers[deployer] = false;
         emit DeployerRevoked(deployer);
     }
 
-    function joinFactory(address swaAccount, address _admin, bytes32 hash, bytes memory _signature) 
-        external onlyAdmin(_admin, hash, _signature) 
+    function joinFactory(address swaAccount, bytes32 hash, bytes memory _signature) 
+        external _validateSignature(swaAccount, hash, _signature) 
     {
         authorizedDeployers[swaAccount] = true;
         emit DeployerAuthorized(swaAccount);
     }
 
-    function isUserAuthorized(address swaAccount, address _admin, bytes32 hash, bytes memory _signature) 
-        external view onlyAdmin(_admin, hash, _signature)  returns(bool)
+    function isUserAuthorized(address swaAccount, bytes32 hash, bytes memory _signature) 
+        external view _validateSignature(swaAccount, hash, _signature)  returns(bool)
     {
         return authorizedDeployers[swaAccount];
     }
@@ -74,6 +79,7 @@ contract GardenFactoryImplementationContract {
     function deployGardenProxy(
         bytes memory bytecode,
         string memory gardenId,
+        address nft,
         address deployer,
         bytes32 hash, 
         bytes memory _signature
@@ -87,8 +93,24 @@ contract GardenFactoryImplementationContract {
         // Check if the contract already exists at the computed address
         require(!isContract(computedAddress), "Contract already deployed");
 
-        // Encode the constructor arguments
-        bytes memory constructorArgs = abi.encode(deployer);
+        // Deploy the contract and pass the constructor arguments
+        address deployedAddress = _deployProxy(bytecode, deployer, nft, salt);
+
+        gardenProxyContracts[deployer][gardenId] = deployedAddress;
+        emit GardenDeployed(deployer, deployedAddress, gardenId);
+
+        return deployedAddress;
+    }
+
+    function _deployProxy(
+        bytes memory bytecode, 
+        address deployer, 
+        address nft, 
+        bytes32 salt
+    ) internal returns (address) 
+    {
+        // Encode the constructor arguments (including both deployer and nft)
+        bytes memory constructorArgs = abi.encode(deployer, nft);
         
         // Concatenate bytecode and constructor arguments
         bytes memory initCode = abi.encodePacked(bytecode, constructorArgs);
@@ -107,13 +129,11 @@ contract GardenFactoryImplementationContract {
             }
         }
 
-        gardenProxyContracts[deployer][gardenId] = deployedAddress;
-        emit GardenDeployed(deployer, deployedAddress, gardenId);
         return deployedAddress;
     }
 
-    function getAddress(address deployer, bytes memory bytecode, string memory id) public view returns (address) {
-        bytes32 salt = getSalt(deployer, id);
+    function getAddress(address deployer, bytes memory bytecode, string memory gardenId) public view returns (address) {
+        bytes32 salt = getSalt(deployer, gardenId);
         bytes32 bytecodeHash = keccak256(bytecode);
         bytes32 hash = keccak256(abi.encodePacked(bytes1(0xff), address(this), salt, bytecodeHash));
         return address(uint160(uint(hash)));

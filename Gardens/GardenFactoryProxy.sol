@@ -27,7 +27,7 @@ interface ERC1271 {
     ) external view returns (bytes4);
 }
 
-contract GardenUpgradableProxy {
+contract GardenUpgradableFactoryProxy {
     bytes4 public constant MAGIC_VALUE = 0x1626ba7e;
     event AdminChanged(address previousAdmin, address newAdmin);
     event Upgraded(address newImplementation);
@@ -47,7 +47,7 @@ contract GardenUpgradableProxy {
     uint256 private voteCount;
 
     // garden implementations list
-    mapping(address => mapping(string => address)) public gardenProxyContracts;
+    mapping(address => mapping(uint256 => address)) public gardenProxyContracts;
     mapping(uint256 => address) public gardenImplementationMap;
     address[] public gardenImplementationList;
 
@@ -61,9 +61,14 @@ contract GardenUpgradableProxy {
         gardenImplementationMap[gardenImpModule] = _gardenImplementation; 
     }
 
-    modifier onlyAdmin(address _user, bytes32 hash, bytes memory _signature) {
-        require(_isValidSignature(_user, hash, _signature), "Invalid user access");
-        require(isAdmin[_user], "Caller is not an admin");
+    modifier onlyAdmin(address _admin, bytes32 hash, bytes memory _signature) {
+        require(_isValidSignature(_admin, hash, _signature), "Invalid user access");
+        require(isAdmin[_admin], "Caller is not an admin");
+        _;
+    }
+
+    modifier _validateSignature(address _swa, bytes32 hash, bytes memory _signature) {
+        require(_isValidSignature(_swa, hash, _signature), "Invalid user access");
         _;
     }
 
@@ -108,16 +113,16 @@ contract GardenUpgradableProxy {
     }
 
     // Admin interface //
-    function addAdmin(address _admin, address _user, bytes32 hash, bytes memory _signature) 
-        external onlyAdmin(_user, hash, _signature) 
+    function addAdmin(address _admin, address _swa, bytes32 hash, bytes memory _signature) 
+        external onlyAdmin(_admin, hash, _signature) 
     {
-        _addAdmin(_admin);
+        _addAdmin(_swa);
     }
 
-    function removeAdmin(address _admin, address _user, bytes32 hash, bytes memory _signature) 
-        external onlyAdmin(_user, hash, _signature) 
+    function removeAdmin(address _admin, address _swa, bytes32 hash, bytes memory _signature) 
+        external onlyAdmin(_admin, hash, _signature) 
     {
-        _removeAdmin(_admin);
+        _removeAdmin(_swa);
     }
 
     function proposeUpgrade(address _admin, address _implementation, bytes32 hash, bytes memory _signature) 
