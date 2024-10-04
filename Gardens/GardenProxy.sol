@@ -20,76 +20,24 @@ library StorageSlot {
     }
 }
 
-interface ERC1271 {
-    function isValidSignature(
-        bytes32 _hash,
-        bytes calldata _signature
-    ) external view returns (bytes4);
+interface IFactory {
+    function getGardenImplementationModule(
+        uint256 gardenImpModule
+    ) external view returns (address);
 }
 
 contract UpgradeableGardenProxy {
-    event TokenReceived(address indexed token, address indexed from, uint256 amount);
     bytes4 public constant MAGIC_VALUE = 0x1626ba7e;
     bytes32 private constant ADMIN_SLOT = bytes32(uint256(keccak256("eip1967.proxy.admin")) - 1);
+    bytes32 private constant FACTORY_PROXY = bytes32(uint256(keccak256("eip1967.proxy.factory")) - 1);
+    bytes32 private constant GARDEN_ADDRESS = bytes32(uint256(keccak256("eip1967.proxy.garden")) - 1);
+    bytes32 private constant NFT_ADDRESS = bytes32(uint256(keccak256("eip1967.proxy.nft")) - 1);
 
-    // garden contract storage
-    address private admin;
-    address public gardenAddress;
-    address private immutable nftOwership;
-    mapping(uint256 => address) public gardenImplementationMap;
-
-    constructor(address _admin, address _nftID) {
-        admin = _admin;
-        nftOwership = _nftID;
-        gardenAddress = address(this);
-    }
-
-    modifier onlyAdmin(address _user, bytes32 hash, bytes memory _signature) {
-        require(_isValidSignature(_user, hash, _signature), "Invalid user access");
-        require(admin == _user, "Caller is not authorized");
-        _;
-    }
-
-    function _isValidSignature(address _addr, bytes32 hash, bytes memory _signature) public view returns (bool) {
-        bytes4 result = ERC1271(_addr).isValidSignature(hash, _signature);
-        require((result == MAGIC_VALUE), "Invalid Signature");
-        return result == MAGIC_VALUE;
-    }
-
-    function _getAdmin() private view returns (address) {
-        return admin;
-    }
-
-    function _setAdmin(address _admin) private {
-        require(_admin != address(0), "admin = zero address");
-        admin = _admin;
-    }
-
-    // Admin interface //
-    function _changeAdmin(address _admin, bytes32 hash, bytes memory _signature) 
-        external onlyAdmin(_admin, hash, _signature) 
-    {
-        _setAdmin(_admin);
-    }
-
-    function getAdmin(address _admin, bytes32 hash, bytes memory _signature) 
-        external onlyAdmin(_admin, hash, _signature) view returns (address) 
-    {
-        return _getAdmin();
-    }
-
-    function setGardenImplementationModule(address _admin, address _implementation, uint256 gardenImpModule, bytes32 hash, bytes memory _signature) 
-        external onlyAdmin(_admin, hash, _signature) 
-    {
-        require(_admin != address(0), "Invalid address");
-        require(_implementation != address(0), "Invalid address");
-        gardenImplementationMap[gardenImpModule] = _implementation;
-    }
-
-    function getGardenImplementationModule(address _admin, uint256 gardenImpModule, bytes32 hash, bytes memory _signature) 
-        external view onlyAdmin(_admin, hash, _signature) returns (address) 
-    {
-        return gardenImplementationMap[gardenImpModule];
+    constructor(address _admin, address _factory, address _nftID) {
+        StorageSlot.getAddressSlot(ADMIN_SLOT).value = _admin;
+        StorageSlot.getAddressSlot(FACTORY_PROXY).value = _factory;
+        StorageSlot.getAddressSlot(GARDEN_ADDRESS).value = address(this);
+        StorageSlot.getAddressSlot(NFT_ADDRESS).value = _nftID;
     }
 
     // User interface //
@@ -110,18 +58,22 @@ contract UpgradeableGardenProxy {
     }
 
     function _fallback() private {
-        uint256 key = _extractKeyFromData(msg.data);
-        address implementation = gardenImplementationMap[key];
+        uint256 impModule = _extractKeysFromData(msg.data);
+        address factoryAddress = StorageSlot.getAddressSlot(FACTORY_PROXY).value;
+        address implementation = IFactory(factoryAddress).getGardenImplementationModule(impModule);
         _delegate(implementation);
     }
 
-    function _extractKeyFromData(bytes memory data) internal pure returns (uint256) {
-        require(data.length >= 36, "Insufficient data");
-        uint256 key;
+    function _extractKeysFromData(bytes memory data) internal pure returns (uint256) {
+        require(data.length >= 100, "Insufficient data");
+
+        uint256 impModule;
+
         assembly {
-            key := mload(add(data, 0x20)) 
+            impModule := mload(add(data, 0x24))
         }
-        return key;
+
+        return impModule;
     }
 
     fallback() external payable {

@@ -6,6 +6,26 @@ pragma solidity ^0.8.24;
     @author BLOK Capital
 #####################################################*/
 
+library StorageSlot {
+    struct AddressSlot {
+        address value;
+    }
+
+    function getAddressSlot(
+        bytes32 slot
+    ) internal pure returns (AddressSlot storage pointer) {
+        assembly {
+            pointer.slot := slot
+        }
+    }
+}
+
+interface IFactory {
+    function getGardenImplementationModule(
+        uint256 gardenImpModule
+    ) external view returns (address);
+}
+
 interface ERC1271 {
     function isValidSignature(
         bytes32 _hash,
@@ -53,22 +73,20 @@ interface ISwapRouter03 {
     returns (uint256 amountIn);
 }
 
-contract TokenBoundAccount {
-    event TokenReceived(address indexed token, address indexed from, uint256 amount);
+contract GardenImplementation {
     bytes4 public constant MAGIC_VALUE = 0x1626ba7e;
-
-    bytes32 private constant IMPLEMENTATION_SLOT = bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1);
     bytes32 private constant ADMIN_SLOT = bytes32(uint256(keccak256("eip1967.proxy.admin")) - 1);
+    bytes32 private constant FACTORY_PROXY = bytes32(uint256(keccak256("eip1967.proxy.factory")) - 1);
+    bytes32 private constant GARDEN_ADDRESS = bytes32(uint256(keccak256("eip1967.proxy.garden")) - 1);
+    bytes32 private constant NFT_ADDRESS = bytes32(uint256(keccak256("eip1967.proxy.nft")) - 1);
 
-    // garden contract storage
-    address private admin;
-    address public gardenAddress;
-    address private immutable nftOwership;
-    mapping(uint256 => address) public gardenImplementationMap;
+    modifier onlyAdmin(uint256 gardenImpModule, address _user, bytes32 hash, bytes memory _signature) {
+        address admin = StorageSlot.getAddressSlot(ADMIN_SLOT).value;
+        address factoryAddress = StorageSlot.getAddressSlot(FACTORY_PROXY).value;
+        address implementation = IFactory(factoryAddress).getGardenImplementationModule(gardenImpModule);
 
-    modifier onlyAdmin(address _user, uint256 gardenImpModule, bytes32 hash, bytes memory _signature) {
+        require(implementation != address(0), "Garden implementation not set");
         require(_isValidSignature(_user, hash, _signature), "Invalid user access");
-        require(gardenImplementationMap[gardenImpModule] != address(0), "Garden implementation not set");
         require(admin == _user, "Caller is not authorized");
         _;
     }
@@ -79,43 +97,71 @@ contract TokenBoundAccount {
         return result == MAGIC_VALUE;
     }
 
+    /*#####################################
+        Admin Interface
+    #####################################*/
+
+    function _getAdmin() private view returns (address) {
+        address admin = StorageSlot.getAddressSlot(ADMIN_SLOT).value;
+        return admin;
+    }
+
+    function _setAdmin(address _admin) private {
+        require(_admin != address(0), "admin = zero address");
+        StorageSlot.getAddressSlot(ADMIN_SLOT).value = _admin;
+    }
+
+    function _changeAdmin(uint256 gardenImpModule, address _admin, bytes32 hash, bytes memory _signature) 
+        external onlyAdmin(gardenImpModule, _admin, hash, _signature) 
+    {
+        _setAdmin(_admin);
+    }
+
+    function getAdmin(uint256 gardenImpModule, address _admin, bytes32 hash, bytes memory _signature) 
+        external onlyAdmin(gardenImpModule, _admin, hash, _signature) view returns (address) 
+    {
+        return _getAdmin();
+    }
+
+    /*#####################################
+        Defi Interface
+    #####################################*/
+
     function getTokenBalance(uint256 gardenImpModule, address tokenAddress, address _admin, bytes32 hash, bytes memory _signature) 
-        external onlyAdmin(_admin, gardenImpModule, hash, _signature) view returns (uint256) 
+        external onlyAdmin(gardenImpModule, _admin, hash, _signature) view returns (uint256) 
     {
         IERC20 token = IERC20(tokenAddress);
+        address gardenAddress = StorageSlot.getAddressSlot(GARDEN_ADDRESS).value;
         return token.balanceOf(gardenAddress);
     }
 
     function transferERC20(
         uint256 gardenImpModule, address tokenAddress, address recipient, uint256 amount, address _admin, bytes32 hash, bytes memory _signature
-    ) external virtual onlyAdmin(_admin, gardenImpModule, hash, _signature) {
+    ) external virtual onlyAdmin(gardenImpModule, _admin, hash, _signature) {
         IERC20 token = IERC20(tokenAddress);
         require(token.transfer(recipient, amount), "Transfer failed");
-        emit TokenReceived(tokenAddress, recipient, amount);
-    }
+    }  
 
     function swapExactInputSingleHop(
         uint256 gardenImpModule,
         uint256 amountIn, 
-        uint256 amountOutMin, 
         address tokenIn, 
-        address tokenOut,
+        address tokenOut, 
         address _admin,
         bytes32 hash, 
         bytes memory _signature
     ) 
-        external onlyAdmin(_admin, gardenImpModule, hash, _signature)
+        external onlyAdmin(gardenImpModule, _admin, hash, _signature)
         virtual 
     {
         // Approve tokens and perform the swap
-        _approveAndSwap(tokenIn, tokenOut, amountIn, amountOutMin);
+        _approveAndSwap(tokenIn, tokenOut, amountIn);
     }
 
     function _approveAndSwap(
         address tokenIn,
         address tokenOut,
-        uint256 amountIn,
-        uint256 amountOutMin
+        uint256 amountIn
     ) internal {
         address SWAP_ROUTER_03 = 0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45;
         ISwapRouter03 router = ISwapRouter03(SWAP_ROUTER_03);
@@ -135,7 +181,7 @@ contract TokenBoundAccount {
             fee: 3000, 
             recipient: address(this), 
             amountIn: amountIn,
-            amountOutMinimum: amountOutMin,
+            amountOutMinimum: 0,
             sqrtPriceLimitX96: 0
         });
 

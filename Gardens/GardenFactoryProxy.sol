@@ -29,22 +29,19 @@ interface ERC1271 {
 
 contract GardenUpgradableFactoryProxy {
     bytes4 public constant MAGIC_VALUE = 0x1626ba7e;
-    event AdminChanged(address previousAdmin, address newAdmin);
-    event Upgraded(address newImplementation);
-
-    bytes32 private constant IMPLEMENTATION_SLOT =
-        bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1);
-        
-    bytes32 private constant ADMIN_SLOT =
-        bytes32(uint256(keccak256("eip1967.proxy.admin")) - 1);
+    bytes32 private constant IMPLEMENTATION_SLOT = bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1);   
+    bytes32 private constant ADMIN_SLOT = bytes32(uint256(keccak256("eip1967.proxy.admin")) - 1);
     
     // Proxy admins and factory storage
     address[] private admins;
     mapping(address => bool) private isAdmin;
     mapping(address => bool) public authorizedDeployers;
+    mapping(address => uint256) public deployerId;
     mapping(address => bool) private upgradeVotes;
     address private proposedFactoryImplementation;
     uint256 private voteCount;
+    uint256 private gardenCount;
+    uint256 private userCount;
 
     // garden implementations list
     mapping(address => mapping(uint256 => address)) public gardenProxyContracts;
@@ -78,6 +75,10 @@ contract GardenUpgradableFactoryProxy {
         return result == MAGIC_VALUE;
     }
 
+    /*#####################################
+        Admin Interface
+    #####################################*/
+
     function _getAdmin() private view returns (address[] memory) {
         return admins;
     }
@@ -101,18 +102,6 @@ contract GardenUpgradableFactoryProxy {
         }
     }
 
-    function _getFactoryImplementation() private view returns (address) {
-        return StorageSlot.getAddressSlot(IMPLEMENTATION_SLOT).value;
-    }
-
-    function _setImplementation(address _implementation) private {
-        require(
-            _implementation.code.length > 0, "implementation is not contract"
-        );
-        StorageSlot.getAddressSlot(IMPLEMENTATION_SLOT).value = _implementation;
-    }
-
-    // Admin interface //
     function addAdmin(address _admin, address _swa, bytes32 hash, bytes memory _signature) 
         external onlyAdmin(_admin, hash, _signature) 
     {
@@ -123,6 +112,21 @@ contract GardenUpgradableFactoryProxy {
         external onlyAdmin(_admin, hash, _signature) 
     {
         _removeAdmin(_swa);
+    }
+
+    /*#####################################
+        Factory Implementation Interface
+    #####################################*/
+
+    function _getFactoryImplementation() private view returns (address) {
+        return StorageSlot.getAddressSlot(IMPLEMENTATION_SLOT).value;
+    }
+
+    function _setImplementation(address _implementation) private {
+        require(
+            _implementation.code.length > 0, "implementation is not contract"
+        );
+        StorageSlot.getAddressSlot(IMPLEMENTATION_SLOT).value = _implementation;
     }
 
     function proposeUpgrade(address _admin, address _implementation, bytes32 hash, bytes memory _signature) 
@@ -170,7 +174,10 @@ contract GardenUpgradableFactoryProxy {
         return _getFactoryImplementation();
     }
 
-    // garden implementation interface
+    /*#####################################
+        Graden Implementation Interface
+    #####################################*/
+
     function setGardenImplementationModule(address _admin, address _implementation, uint256 gardenImpModule, bytes32 hash, bytes memory _signature) 
         external onlyAdmin(_admin, hash, _signature) 
     {
@@ -179,8 +186,8 @@ contract GardenUpgradableFactoryProxy {
         gardenImplementationMap[gardenImpModule] = _implementation;
     }
 
-    function getGardenImplementationModule(address _admin, uint256 gardenImpModule, bytes32 hash, bytes memory _signature) 
-        external view onlyAdmin(_admin, hash, _signature) returns (address) 
+    function getGardenImplementationModule(uint256 gardenImpModule) 
+        external view returns (address) 
     {
         return gardenImplementationMap[gardenImpModule];
     }

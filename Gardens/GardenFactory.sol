@@ -23,9 +23,12 @@ contract GardenFactoryImplementationContract {
     address[] private admins;
     mapping(address => bool) private isAdmin;
     mapping(address => bool) public authorizedDeployers;
+    mapping(address => uint256) public deployerId;
     mapping(address => bool) private upgradeVotes;
     address private proposedFactoryImplementation;
     uint256 private voteCount;
+    uint256 private gardenCount;
+    uint256 private userCount;
 
     // garden implementations list
     mapping(address => mapping(string => address)) public gardenProxyContracts;
@@ -51,7 +54,7 @@ contract GardenFactoryImplementationContract {
 
     function authorizeDeployer(address _admin, address deployer, bytes32 hash, bytes memory _signature) 
         external onlyAdmin(_admin, hash, _signature) 
-    {
+    { 
         authorizedDeployers[deployer] = true;
         emit DeployerAuthorized(deployer);
     }
@@ -67,6 +70,8 @@ contract GardenFactoryImplementationContract {
         external _validateSignature(swaAccount, hash, _signature) 
     {
         authorizedDeployers[swaAccount] = true;
+        deployerId[swaAccount] = userCount + 1;
+        userCount++;
         emit DeployerAuthorized(swaAccount);
     }
 
@@ -76,14 +81,27 @@ contract GardenFactoryImplementationContract {
         return authorizedDeployers[swaAccount];
     }
 
+    function getGardenCounts(address swaAccount, bytes32 hash, bytes memory _signature) 
+        external view _validateSignature(swaAccount, hash, _signature)  returns(uint256)
+    {
+        return gardenCount;
+    }
+
+    function getUserCounts(address swaAccount, bytes32 hash, bytes memory _signature) 
+        external view _validateSignature(swaAccount, hash, _signature)  returns(uint256)
+    {
+        return userCount;
+    }
+
     function deployGardenProxy(
         bytes memory bytecode,
-        string memory gardenId,
-        address nft,
         address deployer,
+        address factory,
+        address nft,
+        string memory gardenId,
         bytes32 hash, 
         bytes memory _signature
-    ) external onlyAdmin(deployer, hash, _signature) returns (address) 
+    ) external _validateSignature(deployer, hash, _signature) returns (address) 
     {
         require(authorizedDeployers[deployer], "Not authorized");
 
@@ -94,23 +112,25 @@ contract GardenFactoryImplementationContract {
         require(!isContract(computedAddress), "Contract already deployed");
 
         // Deploy the contract and pass the constructor arguments
-        address deployedAddress = _deployProxy(bytecode, deployer, nft, salt);
+        address deployedAddress = _deployProxy(bytecode, factory, deployer, nft, salt);
 
         gardenProxyContracts[deployer][gardenId] = deployedAddress;
+        gardenCount++;
         emit GardenDeployed(deployer, deployedAddress, gardenId);
 
         return deployedAddress;
     }
 
     function _deployProxy(
-        bytes memory bytecode, 
+        bytes memory bytecode,
+        address factory, 
         address deployer, 
         address nft, 
         bytes32 salt
     ) internal returns (address) 
     {
         // Encode the constructor arguments (including both deployer and nft)
-        bytes memory constructorArgs = abi.encode(deployer, nft);
+        bytes memory constructorArgs = abi.encode(deployer, factory, nft);
         
         // Concatenate bytecode and constructor arguments
         bytes memory initCode = abi.encodePacked(bytecode, constructorArgs);
