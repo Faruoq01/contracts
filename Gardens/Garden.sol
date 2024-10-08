@@ -70,7 +70,16 @@ interface ISwapRouter03 {
     function exactOutputSingle(ExactOutputSingleParams calldata params)
     external
     payable
-    returns (uint256 amountIn);
+    returns (uint256 amountIn); 
+}
+
+interface IAavePoolV3 {
+    function supply(
+        address asset, 
+        uint256 amount, 
+        address onBehalfOf, 
+        uint16 referralCode
+    ) external;
 }
 
 contract GardenImplementation {
@@ -151,8 +160,7 @@ contract GardenImplementation {
         bytes32 hash, 
         bytes memory _signature
     ) 
-        external onlyAdmin(gardenImpModule, _admin, hash, _signature)
-        virtual 
+        external onlyAdmin(gardenImpModule, _admin, hash, _signature) 
     {
         // Approve tokens and perform the swap
         _approveAndSwap(tokenIn, tokenOut, amountIn);
@@ -187,5 +195,29 @@ contract GardenImplementation {
 
         // Perform the swap
         router.exactInputSingle(params);
+    }
+
+    function lendToAeve(
+        uint256 gardenImpModule, 
+        address _admin, 
+        address tokenIn, 
+        uint256 amountIn,
+        bytes32 hash, 
+        bytes memory _signature
+    ) 
+        external onlyAdmin(gardenImpModule, _admin, hash, _signature) 
+    {
+        address POOL = 0x794a61358D6845594F94dc1DB02A252b5b4814aD;
+        IERC20 ItokenIn = IERC20(tokenIn);
+        IAavePoolV3 pool = IAavePoolV3(POOL);
+
+        require(ItokenIn.balanceOf(address(this)) >= amountIn, "Insufficient token balance in contract");
+        ItokenIn.approve(address(pool), amountIn);
+        pool.supply({
+            asset: tokenIn,
+            amount: amountIn,
+            onBehalfOf: address(this),
+            referralCode: 0
+        });
     }
 }
