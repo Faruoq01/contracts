@@ -44,12 +44,13 @@ interface ERC1271 {
 
 contract GardenUpgradableFactoryProxy {
     bytes4 public constant MAGIC_VALUE = 0x1626ba7e;
-    bytes32 private constant IMPLEMENTATION_SLOT = bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1);   
     bytes32 private constant ADMIN_SLOT = bytes32(uint256(keccak256("eip1967.proxy.admin")) - 1);
+    bytes32 private constant IMPLEMENTATION_SLOT = bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1);   
     bytes32 private constant PROPOSED_IMPLEMENTATION_CONTRACT = bytes32(uint256(keccak256("eip1967.proxy.proposed.implementation.contract")) - 1);
     bytes32 private constant VOTE_COUNT = bytes32(uint256(keccak256("eip1967.proxy.vote.count")) - 1);
     bytes32 private constant GARDEN_COUNT = bytes32(uint256(keccak256("eip1967.proxy.garden.count")) - 1);
     bytes32 private constant USER_COUNT = bytes32(uint256(keccak256("eip1967.proxy.user.count")) - 1);
+    bytes32 private constant API_KEY_REGISTRY = bytes32(uint256(keccak256("eip1967.proxy.apiKey.registry")) - 1);
 
     // Proxy admins and factory storage
     address[] private admins;
@@ -63,7 +64,13 @@ contract GardenUpgradableFactoryProxy {
     mapping(uint256 => address) public gardenImplementationMap;
     address[] public gardenImplementationList;
 
-    constructor(address[] memory _admins, address _implementation, uint256 gardenImpModule, address _gardenImplementation) {
+    constructor(
+        address[] memory _admins, 
+        address _implementation, 
+        uint256 gardenImpModule, 
+        address _gardenImplementation,
+        address _apiKeyRegistry
+    ) {
         require(_admins.length > 0, "Admins required");
         for (uint256 i = 0; i < _admins.length; i++) {
             require(_admins[i] != address(0), "admin = zero address");
@@ -73,9 +80,13 @@ contract GardenUpgradableFactoryProxy {
         }
         
         require( _implementation.code.length > 0, "implementation is not contract");
+        require( _gardenImplementation.code.length > 0, "garden implementation is not contract");
+        require( _apiKeyRegistry.code.length > 0, "api key registry is not contract");
+
         StorageSlot.getAddressSlot(IMPLEMENTATION_SLOT).value = _implementation;
         gardenImplementationList.push(_gardenImplementation);
         gardenImplementationMap[gardenImpModule] = _gardenImplementation; 
+        StorageSlot.getAddressSlot(API_KEY_REGISTRY).value = _apiKeyRegistry;
     }
 
     // User interface //

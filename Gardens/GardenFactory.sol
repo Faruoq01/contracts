@@ -41,7 +41,26 @@ interface ERC1271 {
     ) external view returns (bytes4);
 }
 
+interface IApiKeyRegistryProxy {
+    function validateApiKey(
+        address user, 
+        bytes32 key, 
+        bytes32 hash, 
+        bytes memory _signature
+    ) external view returns (bool);
+}
+
 contract GardenFactoryImplementationContract {
+    struct GardenProxyParams {
+        bytes bytecode;
+        bytes32 key;
+        address deployer;
+        address factory;
+        address nft;
+        uint256 gardenId;
+        bytes32 hash;
+        bytes signature;
+    }
     event GardenDeployed(address indexed deployer, address indexed contractAddress, uint256 id);
     event DeployerAuthorized(address indexed deployer);
     event DeployerRevoked(address indexed deployer);
@@ -54,6 +73,7 @@ contract GardenFactoryImplementationContract {
     bytes32 private constant VOTE_COUNT = bytes32(uint256(keccak256("eip1967.proxy.vote.count")) - 1);
     bytes32 private constant GARDEN_COUNT = bytes32(uint256(keccak256("eip1967.proxy.garden.count")) - 1);
     bytes32 private constant USER_COUNT = bytes32(uint256(keccak256("eip1967.proxy.user.count")) - 1);
+    bytes32 private constant API_KEY_REGISTRY = bytes32(uint256(keccak256("eip1967.proxy.apiKey.registry")) - 1);
 
     // Proxy admins and factory storage
     address[] private admins;
@@ -67,14 +87,16 @@ contract GardenFactoryImplementationContract {
     mapping(uint256 => address) public gardenImplementationMap;
     address[] public gardenImplementationList;
 
-    modifier onlyAdmin(address _admin, bytes32 hash, bytes memory _signature) {
+    modifier onlyAdmin(address _admin, bytes32 key, bytes32 hash, bytes memory _signature) {
         require(_isValidSignature(_admin, hash, _signature), "Invalid user access");
+        require(_isValidApiKey(_admin, key, hash, _signature), "Invalid access key");
         require(isAdmin[_admin], "Caller is not an admin");
         _;
     }
 
-    modifier _validateSignature(address _swa, bytes32 hash, bytes memory _signature) {
+    modifier _validateSignature(address _swa, bytes32 key, bytes32 hash, bytes memory _signature) {
         require(_isValidSignature(_swa, hash, _signature), "Invalid user access");
+        require(_isValidApiKey(_swa, key, hash, _signature), "Invalid access key");
         _;
     }
 
@@ -82,6 +104,18 @@ contract GardenFactoryImplementationContract {
         bytes4 result = ERC1271(_addr).isValidSignature(hash, _signature);
         require((result == MAGIC_VALUE), "Invalid Signature");
         return result == MAGIC_VALUE;
+    }
+
+    modifier _validateApiKey(address _swa, bytes32 key, bytes32 hash, bytes memory _signature) {
+        require(_isValidApiKey(_swa, key, hash, _signature), "Invalid user access");
+        _;
+    }
+
+    function _isValidApiKey(address _addr, bytes32 key, bytes32 hash, bytes memory _signature) public view returns (bool) {
+        address apiKeyAddress = StorageSlot.getAddressSlot(API_KEY_REGISTRY).value;
+        bool result = IApiKeyRegistryProxy(apiKeyAddress).validateApiKey(_addr, key, hash, _signature);
+        require(result, "Invalid Signature");
+        return result;
     }
 
     /*#####################################
@@ -111,14 +145,14 @@ contract GardenFactoryImplementationContract {
         }
     }
 
-    function addAdmin(address _admin, address _swa, bytes32 hash, bytes memory _signature) 
-        external onlyAdmin(_admin, hash, _signature) 
+    function addAdmin(address _admin, bytes32 key, address _swa, bytes32 hash, bytes memory _signature) 
+        external onlyAdmin(_admin, key, hash, _signature) 
     {
         _addAdmin(_swa);
     }
 
-    function removeAdmin(address _admin, address _swa, bytes32 hash, bytes memory _signature) 
-        external onlyAdmin(_admin, hash, _signature) 
+    function removeAdmin(address _admin, bytes32 key, address _swa, bytes32 hash, bytes memory _signature) 
+        external onlyAdmin(_admin, key, hash, _signature) 
     {
         _removeAdmin(_swa);
     }
@@ -138,16 +172,16 @@ contract GardenFactoryImplementationContract {
         StorageSlot.getAddressSlot(IMPLEMENTATION_SLOT).value = _implementation;
     }
 
-    function proposeUpgrade(address _admin, address _implementation, bytes32 hash, bytes memory _signature) 
-        external onlyAdmin(_admin, hash, _signature) 
+    function proposeUpgrade(address _admin, bytes32 key, address _implementation, bytes32 hash, bytes memory _signature) 
+        external onlyAdmin(_admin, key, hash, _signature) 
     {
         require(_implementation != address(0), "Invalid implementation address");
         StorageSlot.getAddressSlot(PROPOSED_IMPLEMENTATION_CONTRACT).value = _implementation;
         _resetVotes();
     }
 
-    function voteForUpgrade(address _admin, bytes32 hash, bytes memory _signature) 
-        external onlyAdmin(_admin, hash, _signature) 
+    function voteForUpgrade(address _admin, bytes32 key, bytes32 hash, bytes memory _signature) 
+        external onlyAdmin(_admin, key, hash, _signature) 
     {
         address _implementation = StorageSlot.getAddressSlot(PROPOSED_IMPLEMENTATION_CONTRACT).value;
         uint256 _voteCount = StorageSlot.getUint256Slot(VOTE_COUNT).value;
@@ -157,8 +191,8 @@ contract GardenFactoryImplementationContract {
         StorageSlot.getUint256Slot(VOTE_COUNT).value = _voteCount++;
     }
 
-    function upgradeTo(address _admin, bytes32 hash, bytes memory _signature) 
-        external onlyAdmin(_admin, hash, _signature) 
+    function upgradeTo(address _admin, bytes32 key, bytes32 hash, bytes memory _signature) 
+        external onlyAdmin(_admin, key, hash, _signature) 
     {
         address _implementation = StorageSlot.getAddressSlot(PROPOSED_IMPLEMENTATION_CONTRACT).value;
         uint256 _voteCount = StorageSlot.getUint256Slot(VOTE_COUNT).value;
@@ -175,14 +209,14 @@ contract GardenFactoryImplementationContract {
         StorageSlot.getUint256Slot(VOTE_COUNT).value = 0;
     }
 
-    function admin(address _admin, bytes32 hash, bytes memory _signature) 
-        external view onlyAdmin(_admin, hash, _signature) returns (address[] memory) 
+    function admin(address _admin, bytes32 key, bytes32 hash, bytes memory _signature) 
+        external view onlyAdmin(_admin, key, hash, _signature) returns (address[] memory) 
     {
         return _getAdmin();
     }
 
-    function implementation(address _admin, bytes32 hash, bytes memory _signature)  
-        external view onlyAdmin(_admin, hash, _signature) returns (address) 
+    function implementation(address _admin, bytes32 key, bytes32 hash, bytes memory _signature)  
+        external view onlyAdmin(_admin, key, hash, _signature) returns (address) 
     {
         return _getFactoryImplementation();
     }
@@ -191,8 +225,8 @@ contract GardenFactoryImplementationContract {
         Graden Implementation Interface
     #####################################*/
 
-    function setGardenImplementationModule(address _admin, address _implementation, uint256 gardenImpModule, bytes32 hash, bytes memory _signature) 
-        external onlyAdmin(_admin, hash, _signature) 
+    function setGardenImplementationModule(address _admin, bytes32 key, address _implementation, uint256 gardenImpModule, bytes32 hash, bytes memory _signature) 
+        external onlyAdmin(_admin, key, hash, _signature) 
     {
         require(_admin != address(0), "Invalid address");
         require(_implementation != address(0), "Invalid address");
@@ -205,22 +239,8 @@ contract GardenFactoryImplementationContract {
         return gardenImplementationMap[gardenImpModule];
     }
 
-    function authorizeDeployer(address _admin, address deployer, bytes32 hash, bytes memory _signature) 
-        external onlyAdmin(_admin, hash, _signature) 
-    { 
-        authorizedDeployers[deployer] = true;
-        emit DeployerAuthorized(deployer);
-    }
-
-    function revokeDeployer(address _admin, address deployer, bytes32 hash, bytes memory _signature) 
-        external onlyAdmin(_admin, hash, _signature) 
-    {
-        authorizedDeployers[deployer] = false;
-        emit DeployerRevoked(deployer);
-    }
-
-    function joinFactory(address swaAccount, bytes32 hash, bytes memory _signature) 
-        external _validateSignature(swaAccount, hash, _signature) 
+    function joinFactory(address swaAccount, bytes32 key, bytes32 hash, bytes memory _signature) 
+        external _validateSignature(swaAccount, key, hash, _signature) 
     {
         uint256 userCount = StorageSlot.getUint256Slot(USER_COUNT).value;
         authorizedDeployers[swaAccount] = true;
@@ -229,54 +249,49 @@ contract GardenFactoryImplementationContract {
         emit DeployerAuthorized(swaAccount);
     }
 
-    function isUserAuthorized(address swaAccount, bytes32 hash, bytes memory _signature) 
-        external view _validateSignature(swaAccount, hash, _signature)  returns(bool)
+    function isUserAuthorized(address swaAccount, bytes32 key, bytes32 hash, bytes memory _signature) 
+        external view _validateSignature(swaAccount, key, hash, _signature)  returns(bool)
     {
         return authorizedDeployers[swaAccount];
     }
 
-    function getGardenCounts(address swaAccount, bytes32 hash, bytes memory _signature) 
-        external view _validateSignature(swaAccount, hash, _signature)  returns(uint256)
+    function getGardenCounts(address swaAccount, bytes32 key, bytes32 hash, bytes memory _signature) 
+        external view _validateSignature(swaAccount, key, hash, _signature)  returns(uint256)
     {
         uint256 gardenCount = StorageSlot.getUint256Slot(GARDEN_COUNT).value;
         return gardenCount;
     }
 
-    function getUserCounts(address swaAccount, bytes32 hash, bytes memory _signature) 
-        external view _validateSignature(swaAccount, hash, _signature)  returns(uint256)
+    function getUserCounts(address swaAccount, bytes32 key, bytes32 hash, bytes memory _signature) 
+        external view _validateSignature(swaAccount, key, hash, _signature)  returns(uint256)
     {
         uint256 userCount = StorageSlot.getUint256Slot(USER_COUNT).value;
         return userCount;
     }
 
     function deployGardenProxy(
-        bytes memory bytecode,
-        address deployer,
-        address factory,
-        address nft,
-        uint256 gardenId,
-        bytes32 hash, 
-        bytes memory _signature
-    ) external _validateSignature(deployer, hash, _signature) returns (address) 
+        GardenProxyParams memory params
+    ) 
+        external _validateSignature(params.deployer, params.key, params.hash, params.signature) returns (address) 
     {
-        require(authorizedDeployers[deployer], "Not authorized");
+        require(authorizedDeployers[params.deployer], "Not authorized");
 
-        bytes32 salt = getSalt(deployer, gardenId);
-        address computedAddress = getAddress(deployer, bytecode, gardenId);
+        bytes32 salt = getSalt(params.deployer, params.gardenId);
+        address computedAddress = getAddress(params.deployer, params.bytecode, params.gardenId);
 
         // Check if the contract already exists at the computed address
         require(!isContract(computedAddress), "Contract already deployed");
 
         // Deploy the contract and pass the constructor arguments
-        address deployedAddress = _deployProxy(bytecode, factory, deployer, nft, salt);
+        address deployedAddress = _deployProxy(params.bytecode, params.factory, params.deployer, params.nft, salt);
 
-        gardenProxyContracts[deployer][gardenId] = deployedAddress;
+        gardenProxyContracts[params.deployer][params.gardenId] = deployedAddress;
 
         uint256 gardenCount = StorageSlot.getUint256Slot(GARDEN_COUNT).value;
         StorageSlot.getUint256Slot(GARDEN_COUNT).value = gardenCount++;
         
         gardenCount++;
-        emit GardenDeployed(deployer, deployedAddress, gardenId);
+        emit GardenDeployed(params.deployer, deployedAddress, params.gardenId);
 
         return deployedAddress;
     }
@@ -333,11 +348,12 @@ contract GardenFactoryImplementationContract {
 
     function getDeployedGardenProxyContract(
         address deployer, 
+        bytes32 key,
         uint256 gardenId, 
         bytes32 hash, 
         bytes memory _signature
     ) 
-        external view onlyAdmin(deployer, hash, _signature) returns (address) 
+        external view onlyAdmin(deployer, key, hash, _signature) returns (address) 
     {
         require(authorizedDeployers[deployer], "Not authorized");
         return gardenProxyContracts[deployer][gardenId];
