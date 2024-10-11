@@ -305,7 +305,8 @@ contract GardenFactoryImplementationContract {
     ) internal returns (address) 
     {
         // Encode the constructor arguments (including both deployer and nft)
-        bytes memory constructorArgs = abi.encode(deployer, factory, nft);
+        address apiKeyAddress = StorageSlot.getAddressSlot(API_KEY_REGISTRY).value;
+        bytes memory constructorArgs = abi.encode(deployer, factory, nft, apiKeyAddress);
         
         // Concatenate bytecode and constructor arguments
         bytes memory initCode = abi.encodePacked(bytecode, constructorArgs);
