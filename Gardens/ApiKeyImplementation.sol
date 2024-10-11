@@ -158,4 +158,16 @@ contract APIKeyRegistry {
     {
         return apiKeys[user].active;
     }
+
+    function activateKillSwitch(address user, bytes32 hash, bytes memory _signature) 
+        external ifAdmin(user, hash, _signature) 
+    {
+        isProtocolActive = false;
+    }
+
+    function recoverKillSwitch(address user, bytes32 hash, bytes memory _signature) 
+        external ifAdmin(user, hash, _signature) 
+    {
+        isProtocolActive = true;
+    }
 }
