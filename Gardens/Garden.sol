@@ -150,11 +150,6 @@ contract GardenImplementation {
         return result == MAGIC_VALUE;
     }
 
-    modifier _validateApiKey(address _swa, bytes32 key, bytes32 hash, bytes memory _signature) {
-        require(_isValidApiKey(_swa, key, hash, _signature), "Invalid user access");
-        _;
-    }
-
     function _isValidApiKey(address _addr, bytes32 key, bytes32 hash, bytes memory _signature) public view returns (bool) {
         address apiKeyAddress = StorageSlot.getAddressSlot(API_KEY_REGISTRY).value;
         bool result = IApiKeyRegistryProxy(apiKeyAddress).validateApiKey(_addr, key, hash, _signature);
