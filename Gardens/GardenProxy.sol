@@ -32,12 +32,15 @@ contract UpgradeableGardenProxy {
     bytes32 private constant FACTORY_PROXY = bytes32(uint256(keccak256("eip1967.proxy.factory")) - 1);
     bytes32 private constant GARDEN_ADDRESS = bytes32(uint256(keccak256("eip1967.proxy.garden")) - 1);
     bytes32 private constant NFT_ADDRESS = bytes32(uint256(keccak256("eip1967.proxy.nft")) - 1);
+    bytes32 private constant GARDEN_IMPLEMENTATION = bytes32(uint256(keccak256("eip1967.proxy.gardenImplementation")) - 1);
+    bytes32 private constant API_KEY_REGISTRY = bytes32(uint256(keccak256("eip1967.proxy.apiKey.registry")) - 1);
 
-    constructor(address _admin, address _factory, address _nftID) {
+    constructor(address _admin, address _factory, address _nftID, address _apiKeyRegistry) {
         StorageSlot.getAddressSlot(ADMIN_SLOT).value = _admin;
         StorageSlot.getAddressSlot(FACTORY_PROXY).value = _factory;
         StorageSlot.getAddressSlot(GARDEN_ADDRESS).value = address(this);
         StorageSlot.getAddressSlot(NFT_ADDRESS).value = _nftID;
+        StorageSlot.getAddressSlot(API_KEY_REGISTRY).value = _apiKeyRegistry;
     }
 
     // User interface //
@@ -58,10 +61,15 @@ contract UpgradeableGardenProxy {
     }
 
     function _fallback() private {
-        uint256 impModule = _extractKeysFromData(msg.data);
-        address factoryAddress = StorageSlot.getAddressSlot(FACTORY_PROXY).value;
-        address implementation = IFactory(factoryAddress).getGardenImplementationModule(impModule);
-        _delegate(implementation);
+        address garden_implementation = StorageSlot.getAddressSlot(GARDEN_IMPLEMENTATION).value;
+        if(garden_implementation == address(0)){
+            _delegate(garden_implementation);
+        }else{
+            uint256 impModule = _extractKeysFromData(msg.data);
+            address factoryAddress = StorageSlot.getAddressSlot(FACTORY_PROXY).value;
+            address implementation = IFactory(factoryAddress).getGardenImplementationModule(impModule);
+            _delegate(implementation);
+        }
     }
 
     function _extractKeysFromData(bytes memory data) internal pure returns (uint256) {
