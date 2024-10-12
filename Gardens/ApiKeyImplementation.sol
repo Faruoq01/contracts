@@ -43,7 +43,7 @@ contract APIKeyRegistry {
 
     modifier _verifySignature(address _user, bytes32 hash, bytes memory _signature) {
         require(_isValidSignature(_user, hash, _signature) == MAGIC_VALUE, "Invalid signature");
-        require(isProtocolActive, "Protocol unavailable");
+        require(!isProtocolActive, "Protocol unavailable");
         _;
     }
 

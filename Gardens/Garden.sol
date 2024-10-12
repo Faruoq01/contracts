@@ -92,36 +92,41 @@ interface IAavePoolV3 {
 }
 
 contract GardenImplementation {
+    struct GardenBalance {
+        address tokenAddress; 
+        address admin; 
+        bytes32 key; 
+        bytes32 hash; 
+        bytes signature;
+    }
+
     struct GardenTokenTransfer {
-        uint256 gardenImpModule; 
         address tokenAddress; 
         address recipient; 
         uint256 amount; 
-        address _admin; 
+        address admin; 
         bytes32 key; 
         bytes32 hash; 
-        bytes _signature;
+        bytes signature;
     }
 
     struct GardenSwapParams {
-        uint256 gardenImpModule;
         uint256 amountIn;
         address tokenIn;
         address tokenOut; 
-        address _admin;
+        address admin;
         bytes32 key;
         bytes32 hash; 
-        bytes _signature;
+        bytes signature;
     }
 
     struct GardenLendParams {
-        uint256 gardenImpModule; 
-        address _admin; 
+        address admin; 
         address tokenIn; 
         uint256 amountIn;
         bytes32 key;
         bytes32 hash; 
-        bytes _signature;
+        bytes signature;
     }
 
     bytes4 public constant MAGIC_VALUE = 0x1626ba7e;
@@ -214,25 +219,30 @@ contract GardenImplementation {
         Defi Interface
     #####################################*/
 
-    function getTokenBalance(uint256 gardenImpModule, address tokenAddress, address _admin, bytes32 key, bytes32 hash, bytes memory _signature) 
-        external onlyAdmin(gardenImpModule, _admin, key, hash, _signature) view returns (uint256) 
+    function getTokenBalance(
+        uint256 gardenImpModule, 
+        GardenBalance memory params
+    ) 
+        external onlyAdmin(gardenImpModule, params.admin, params.key, params.hash, params.signature) view returns (uint256) 
     {
-        IERC20 token = IERC20(tokenAddress);
+        IERC20 token = IERC20(params.tokenAddress);
         address gardenAddress = StorageSlot.getAddressSlot(GARDEN_ADDRESS).value;
         return token.balanceOf(gardenAddress);
     }
 
     function transferERC20(
+        uint256 gardenImpModule,
         GardenTokenTransfer memory params
-    ) external virtual onlyAdmin(params.gardenImpModule, params._admin, params.key, params.hash, params._signature) {
+    ) external virtual onlyAdmin(gardenImpModule, params.admin, params.key, params.hash, params.signature) {
         IERC20 token = IERC20(params.tokenAddress);
         require(token.transfer(params.recipient, params.amount), "Transfer failed");
     }  
 
     function swapExactInputSingleHop(
+        uint256 gardenImpModule,
         GardenSwapParams memory params
     ) 
-        external onlyAdmin(params.gardenImpModule, params._admin, params.key, params.hash, params._signature) 
+        external onlyAdmin(gardenImpModule, params.admin, params.key, params.hash, params.signature) 
     {
         // Approve tokens and perform the swap
         _approveAndSwap(params.tokenIn, params.tokenOut, params.amountIn);
@@ -270,9 +280,10 @@ contract GardenImplementation {
     }
 
     function lendToAeve(
+        uint256 gardenImpModule,
         GardenLendParams memory params
     ) 
-        external onlyAdmin(params.gardenImpModule, params._admin, params.key, params.hash, params._signature) 
+        external onlyAdmin(gardenImpModule, params.admin, params.key, params.hash, params.signature) 
     {
         address POOL = 0x794a61358D6845594F94dc1DB02A252b5b4814aD;
         IERC20 ItokenIn = IERC20(params.tokenIn);

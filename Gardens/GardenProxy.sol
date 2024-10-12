@@ -63,12 +63,13 @@ contract UpgradeableGardenProxy {
     function _fallback() private {
         address garden_implementation = StorageSlot.getAddressSlot(GARDEN_IMPLEMENTATION).value;
         if(garden_implementation == address(0)){
-            _delegate(garden_implementation);
-        }else{
             uint256 impModule = _extractKeysFromData(msg.data);
             address factoryAddress = StorageSlot.getAddressSlot(FACTORY_PROXY).value;
             address implementation = IFactory(factoryAddress).getGardenImplementationModule(impModule);
             _delegate(implementation);
+            
+        }else{
+            _delegate(garden_implementation);
         }
     }
 
