@@ -188,7 +188,7 @@ contract GardenFactoryImplementationContract {
         require(_implementation != address(0), "No proposed implementation");
         require(!upgradeVotes[_admin], "Already voted");
         upgradeVotes[_admin] = true;
-        StorageSlot.getUint256Slot(VOTE_COUNT).value = _voteCount++;
+        StorageSlot.getUint256Slot(VOTE_COUNT).value = _voteCount + 1;
     }
 
     function upgradeTo(address _admin, bytes32 key, bytes32 hash, bytes memory _signature) 
@@ -219,6 +219,18 @@ contract GardenFactoryImplementationContract {
         external view onlyAdmin(_admin, key, hash, _signature) returns (address) 
     {
         return _getFactoryImplementation();
+    }
+
+    function resetVotes(address _admin, bytes32 key, bytes32 hash, bytes memory _signature)  
+        external onlyAdmin(_admin, key, hash, _signature) 
+    {
+        _resetVotes();
+    }
+
+    function getVoteCount(address _admin, bytes32 key, bytes32 hash, bytes memory _signature)  
+        external view onlyAdmin(_admin, key, hash, _signature) returns(uint256) 
+    {
+        return StorageSlot.getUint256Slot(VOTE_COUNT).value;
     }
 
     /*#####################################
@@ -354,7 +366,7 @@ contract GardenFactoryImplementationContract {
         bytes32 hash, 
         bytes memory _signature
     ) 
-        external view onlyAdmin(deployer, key, hash, _signature) returns (address) 
+        external view _validateSignature(deployer, key, hash, _signature) returns (address) 
     {
         require(authorizedDeployers[deployer], "Not authorized");
         return gardenProxyContracts[deployer][gardenId];
